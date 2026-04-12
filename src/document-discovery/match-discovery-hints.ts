@@ -1,7 +1,7 @@
 import { basename, isAbsolute, relative, sep } from "node:path";
 
 import { compareDiscoveryHints } from "./discovery-hints.ts";
-import type { DocumentDiscoveryHint } from "./types.ts";
+import type { DocumentDiscoveryHint } from "./candidate-types.ts";
 
 export function findMatchedDiscoveryHints(
   hints: readonly DocumentDiscoveryHint[],

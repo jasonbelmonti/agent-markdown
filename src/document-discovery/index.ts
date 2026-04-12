@@ -4,3 +4,5 @@ export {
   discoverDocumentCandidate,
   discoverDocumentCandidates,
 } from "./discover-document-candidates.ts";
+export { parseDocumentFrontmatter } from "./parse-document-frontmatter.ts";
+export { readDocumentDeclaration } from "./read-document-declaration.ts";
