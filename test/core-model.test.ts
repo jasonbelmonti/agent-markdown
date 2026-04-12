@@ -85,6 +85,15 @@ test("exports a task profile contract fixture", () => {
     profile_id: taskProfile.profile_id,
     profile_path: taskProfile.source.path,
     profile: taskProfile,
+    reason: null,
+    compatibility: {
+      declared_doc_spec: agentMarkdownSpec,
+      profile_doc_spec: agentMarkdownSpec,
+      doc_spec_compatible: true,
+      declared_doc_kind: taskDocKind,
+      profile_doc_kind: taskDocKind,
+      doc_kind_compatible: true,
+    },
   } satisfies ProfileResolutionResult;
 
   expect(resolution.profile?.affordances.role).toBe("work");
