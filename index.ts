@@ -1,1 +1,1 @@
-console.log("Hello via Bun!");
+export type * from "./src/core-model/index.ts";
