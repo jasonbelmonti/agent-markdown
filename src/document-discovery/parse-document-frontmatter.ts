@@ -2,36 +2,45 @@ import { parse as parseYaml } from "yaml";
 
 import type { ParsedDocumentFrontmatter } from "./declaration-types.ts";
 
-const FRONTMATTER_BLOCK_PATTERN = /^---\r?\n([\s\S]*?)^---(?:\r?\n)?/m;
 const LEADING_FRONTMATTER_DELIMITER_PATTERN = /^---\r?\n/;
+const CLOSING_FRONTMATTER_DELIMITER_PATTERN = /(?:^|\r?\n)---(?:\r?\n|$)/;
 
 export function parseDocumentFrontmatter(
   markdown: string,
   sourcePath: string,
 ): ParsedDocumentFrontmatter {
-  const match = FRONTMATTER_BLOCK_PATTERN.exec(markdown);
+  const openingDelimiterMatch = LEADING_FRONTMATTER_DELIMITER_PATTERN.exec(markdown);
 
-  if (!match) {
-    if (LEADING_FRONTMATTER_DELIMITER_PATTERN.test(markdown)) {
-      throw new Error(
-        `Document "${sourcePath}" has malformed YAML frontmatter: missing closing delimiter.`,
-      );
-    }
-
+  if (!openingDelimiterMatch) {
     return {
       rawFrontmatter: {},
       rawBodyMarkdown: markdown,
     };
   }
 
-  const rawFrontmatterBlock = match[1] ?? "";
+  const remainder = markdown.slice(openingDelimiterMatch[0].length);
+  const closingDelimiterMatch = CLOSING_FRONTMATTER_DELIMITER_PATTERN.exec(
+    remainder,
+  );
+
+  if (!closingDelimiterMatch) {
+    throw new Error(
+      `Document "${sourcePath}" has malformed YAML frontmatter: missing closing delimiter.`,
+    );
+  }
+
+  const closingDelimiterIndex = remainder.indexOf(
+    "---",
+    closingDelimiterMatch.index,
+  );
+  const rawFrontmatterBlock = remainder.slice(0, closingDelimiterIndex);
   let parsedFrontmatter: unknown;
 
   try {
     parsedFrontmatter =
       rawFrontmatterBlock.trim().length === 0
         ? {}
-        : (parseYaml(rawFrontmatterBlock) ?? {});
+        : parseYaml(rawFrontmatterBlock);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(
@@ -45,10 +54,24 @@ export function parseDocumentFrontmatter(
 
   return {
     rawFrontmatter: parsedFrontmatter,
-    rawBodyMarkdown: markdown.slice(match[0].length),
+    rawBodyMarkdown: stripLeadingNewline(
+      remainder.slice(closingDelimiterIndex + "---".length),
+    ),
   };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function stripLeadingNewline(markdown: string): string {
+  if (markdown.startsWith("\r\n")) {
+    return markdown.slice(2);
+  }
+
+  if (markdown.startsWith("\n")) {
+    return markdown.slice(1);
+  }
+
+  return markdown;
 }

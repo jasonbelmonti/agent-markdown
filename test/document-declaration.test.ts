@@ -105,6 +105,22 @@ Discovery can find a candidate before declarations exist.
   });
 });
 
+test("does not treat later markdown fence-like blocks as frontmatter", () => {
+  const markdown = `# Notes
+
+---
+title: Not declarations
+---
+
+Still body content.
+`;
+
+  expect(parseDocumentFrontmatter(markdown, "drafts/NOTES.md")).toEqual({
+    rawFrontmatter: {},
+    rawBodyMarkdown: markdown,
+  });
+});
+
 test("accepts empty YAML frontmatter delimiters as an empty mapping", () => {
   expect(
     parseDocumentFrontmatter(
@@ -172,4 +188,17 @@ doc_spec: agent-markdown/0.1
   ).toThrow(
     'Document "drafts/BROKEN.md" has malformed YAML frontmatter: missing closing delimiter.',
   );
+});
+
+test("rejects explicit YAML null frontmatter values", () => {
+  expect(() =>
+    parseDocumentFrontmatter(
+      `---
+~
+---
+## Objective
+`,
+      "drafts/NULL.md",
+    ),
+  ).toThrow('Document "drafts/NULL.md" frontmatter must parse to a mapping.');
 });
