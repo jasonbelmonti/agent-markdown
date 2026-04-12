@@ -104,3 +104,23 @@ Discovery can find a candidate before declarations exist.
 `,
   });
 });
+
+test("accepts empty YAML frontmatter delimiters as an empty mapping", () => {
+  expect(
+    parseDocumentFrontmatter(
+      `---
+---
+## Objective
+
+This document intentionally declares an empty mapping.
+`,
+      "drafts/EMPTY.md",
+    ),
+  ).toEqual({
+    rawFrontmatter: {},
+    rawBodyMarkdown: `## Objective
+
+This document intentionally declares an empty mapping.
+`,
+  });
+});

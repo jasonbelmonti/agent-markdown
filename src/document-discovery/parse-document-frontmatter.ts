@@ -2,7 +2,7 @@ import { parse as parseYaml } from "yaml";
 
 import type { ParsedDocumentFrontmatter } from "./declaration-types.ts";
 
-const FRONTMATTER_BLOCK_PATTERN = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n)?/;
+const FRONTMATTER_BLOCK_PATTERN = /^---\r?\n([\s\S]*?)---(?:\r?\n)?/;
 
 export function parseDocumentFrontmatter(
   markdown: string,
