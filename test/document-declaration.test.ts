@@ -124,3 +124,52 @@ This document intentionally declares an empty mapping.
 `,
   });
 });
+
+test("does not terminate frontmatter on inline dashes inside YAML scalars", () => {
+  expect(
+    readDocumentDeclaration({
+      candidate: {
+        path: "drafts/TASK.md",
+        discoveryMatches: ["TASK.md"],
+        matchedHints: [],
+      },
+      markdown: `---
+title: "A --- B"
+doc_spec: agent-markdown/0.1
+---
+## Objective
+`,
+    }),
+  ).toEqual({
+    source: {
+      path: "drafts/TASK.md",
+      discoveryMatches: ["TASK.md"],
+      rawFrontmatter: {
+        title: "A --- B",
+        doc_spec: "agent-markdown/0.1",
+      },
+      rawBodyMarkdown: `## Objective
+`,
+    },
+    declaration: {
+      docSpec: "agent-markdown/0.1",
+      docKind: null,
+      docProfile: null,
+      title: "A --- B",
+    },
+  });
+});
+
+test("rejects unterminated leading frontmatter blocks", () => {
+  expect(() =>
+    parseDocumentFrontmatter(
+      `---
+title: Missing delimiter
+doc_spec: agent-markdown/0.1
+`,
+      "drafts/BROKEN.md",
+    ),
+  ).toThrow(
+    'Document "drafts/BROKEN.md" has malformed YAML frontmatter: missing closing delimiter.',
+  );
+});

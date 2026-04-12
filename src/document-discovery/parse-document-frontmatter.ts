@@ -2,7 +2,8 @@ import { parse as parseYaml } from "yaml";
 
 import type { ParsedDocumentFrontmatter } from "./declaration-types.ts";
 
-const FRONTMATTER_BLOCK_PATTERN = /^---\r?\n([\s\S]*?)---(?:\r?\n)?/;
+const FRONTMATTER_BLOCK_PATTERN = /^---\r?\n([\s\S]*?)^---(?:\r?\n)?/m;
+const LEADING_FRONTMATTER_DELIMITER_PATTERN = /^---\r?\n/;
 
 export function parseDocumentFrontmatter(
   markdown: string,
@@ -11,6 +12,12 @@ export function parseDocumentFrontmatter(
   const match = FRONTMATTER_BLOCK_PATTERN.exec(markdown);
 
   if (!match) {
+    if (LEADING_FRONTMATTER_DELIMITER_PATTERN.test(markdown)) {
+      throw new Error(
+        `Document "${sourcePath}" has malformed YAML frontmatter: missing closing delimiter.`,
+      );
+    }
+
     return {
       rawFrontmatter: {},
       rawBodyMarkdown: markdown,
