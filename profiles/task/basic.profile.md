@@ -48,8 +48,7 @@ validation:
     - Context / Constraints
     - Materially verifiable success criteria
     - Execution notes
-  require_checklist_in_sections:
-    - Materially verifiable success criteria
+  require_checklist_in_success_criteria: true
 affordances:
   role: work
   actionability: execute
