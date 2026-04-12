@@ -1,9 +1,9 @@
 import type { LoadedProfileDocument, MvpProfileId } from "./profiles.ts";
 
 export interface ProfileLookupReference {
-  doc_spec: string;
-  doc_kind: string;
-  doc_profile: string;
+  doc_spec: string | null;
+  doc_kind: string | null;
+  doc_profile: string | null;
 }
 
 // Resolution is data-only so registry behavior can be added later without changing callers.

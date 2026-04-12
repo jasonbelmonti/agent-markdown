@@ -39,24 +39,40 @@ export interface ProfileBodyContract {
   optional_sections: string[];
 }
 
-export interface ProfileValidationRules {
-  require_declared_doc_spec: AgentMarkdownDocSpec;
-  require_declared_doc_kind: MvpDocKind;
+export interface ProfileValidationRules<
+  TDocSpec extends string = AgentMarkdownDocSpec,
+  TDocKind extends string = MvpDocKind,
+> {
+  require_declared_doc_spec: TDocSpec;
+  require_declared_doc_kind: TDocKind;
   require_required_sections: boolean;
   require_nonempty_sections?: string[];
   require_checklist_in_success_criteria?: boolean;
 }
 
-// Keep the loaded profile contract aligned with the current Markdown frontmatter.
-export interface LoadedProfileDocument {
+type MvpProfileKindMap = {
+  "task/basic@v1": "task";
+  "project/basic@v1": "project";
+  "brief/basic@v1": "brief";
+};
+
+type LoadedProfileDocumentById<TProfileId extends MvpProfileId> = {
   source: RawProfileSource;
-  profile_id: MvpProfileId;
+  profile_id: TProfileId;
   doc_spec: AgentMarkdownDocSpec;
-  doc_kind: MvpDocKind;
+  doc_kind: MvpProfileKindMap[TProfileId];
   title: string;
   discovery: ProfileDiscovery;
   metadata: ProfileMetadataContract;
   body: ProfileBodyContract;
-  validation: ProfileValidationRules;
+  validation: ProfileValidationRules<
+    AgentMarkdownDocSpec,
+    MvpProfileKindMap[TProfileId]
+  >;
   affordances: ProfileAffordances;
-}
+};
+
+// Keep the loaded profile contract aligned with the current Markdown frontmatter.
+export type LoadedProfileDocument = {
+  [TProfileId in MvpProfileId]: LoadedProfileDocumentById<TProfileId>;
+}[MvpProfileId];

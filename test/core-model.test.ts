@@ -90,6 +90,17 @@ test("exports a task profile contract fixture", () => {
   expect(resolution.profile?.affordances.role).toBe("work");
 });
 
+test("preserves partial declaration values in profile lookup references", () => {
+  const partialLookup = {
+    doc_spec: agentMarkdownSpec,
+    doc_kind: null,
+    doc_profile: null,
+  } satisfies ProfileLookupReference;
+
+  expect(partialLookup.doc_kind).toBeNull();
+  expect(partialLookup.doc_profile).toBeNull();
+});
+
 test("exports normalized validation and affordance fixtures", () => {
   const validation = {
     conformance: "semantically_valid",
@@ -176,3 +187,42 @@ test("exports a normalized document fixture", () => {
   expect(document.profile.resolved).toBe(true);
   expect(document.body.sections[0]?.heading).toBe("Objective");
 });
+
+// @ts-expect-error Loaded profiles must keep validation declaration requirements aligned with profile identity.
+const invalidTaskProfile: LoadedProfileDocument = {
+  source: {
+    path: taskProfilePath,
+    rawFrontmatter: {
+      profile_id: taskProfileId,
+    },
+    rawBodyMarkdown: "# Purpose\n\nUse this profile for concrete work.",
+  },
+  profile_id: taskProfileId,
+  doc_spec: agentMarkdownSpec,
+  doc_kind: taskDocKind,
+  title: "Invalid task profile",
+  discovery: {
+    filenames: ["TASK.md"],
+    globs: ["**/*.task.md"],
+  },
+  metadata: {
+    required: [],
+    optional: [],
+  },
+  body: {
+    required_sections: [...taskRequiredSections],
+    optional_sections: [...taskOptionalSections],
+  },
+  validation: {
+    require_declared_doc_spec: agentMarkdownSpec,
+    require_declared_doc_kind: "project",
+    require_required_sections: true,
+  },
+  affordances: {
+    role: "work",
+    actionability: "execute",
+    normative_sections: [...taskNormativeSections],
+  },
+};
+
+void invalidTaskProfile;
