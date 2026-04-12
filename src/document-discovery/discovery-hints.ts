@@ -1,5 +1,8 @@
 import type { LoadedProfileRegistry } from "../profile-registry/load-profile-registry.ts";
-import type { DiscoveryHintKind, DocumentDiscoveryHint } from "./types.ts";
+import type {
+  DiscoveryHintKind,
+  DocumentDiscoveryHint,
+} from "./candidate-types.ts";
 
 const discoveryHintKindOrder: Record<DiscoveryHintKind, number> = {
   path: 0,

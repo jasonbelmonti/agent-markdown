@@ -7,7 +7,7 @@ import type {
   DiscoverDocumentCandidatesOptions,
   DocumentDiscoveryCandidate,
   DocumentDiscoveryHint,
-} from "./types.ts";
+} from "./candidate-types.ts";
 
 export function discoverDocumentCandidate(
   options: DiscoverDocumentCandidateOptions,
