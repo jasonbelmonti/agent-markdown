@@ -4,6 +4,7 @@ Planning docs live under `docs/plans/`:
 
 - `docs/plans/agent-markdown-profile-system.md`
 - `docs/plans/agent-markdown-design-brief.md`
+- `docs/plans/agent-markdown-agent-resolution-integration.md`
 
 To install dependencies:
 
