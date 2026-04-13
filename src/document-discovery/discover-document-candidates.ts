@@ -30,15 +30,21 @@ export function discoverDocumentCandidate(
 export function discoverDocumentCandidates(
   options: DiscoverDocumentCandidatesOptions,
 ): DocumentDiscoveryCandidate[] {
-  return options.paths
-    .map((path) =>
-      discoverDocumentCandidate({
-        path,
-        discoveryHints: options.discoveryHints,
-        repoRoot: options.repoRoot,
-      }),
-    )
-    .filter((candidate): candidate is DocumentDiscoveryCandidate => candidate !== null);
+  const candidates: DocumentDiscoveryCandidate[] = [];
+
+  for (const path of options.paths) {
+    const candidate = discoverDocumentCandidate({
+      path,
+      discoveryHints: options.discoveryHints,
+      repoRoot: options.repoRoot,
+    });
+
+    if (candidate !== null) {
+      candidates.push(candidate);
+    }
+  }
+
+  return candidates;
 }
 
 function collectDiscoveryMatches(hints: readonly DocumentDiscoveryHint[]): string[] {
