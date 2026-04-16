@@ -104,6 +104,10 @@ function readOpeningFence(line: string): FenceState | null {
     return null;
   }
 
+  if (matchedFence[1][0] === "`" && matchedFence[2].includes("`")) {
+    return null;
+  }
+
   return {
     marker: matchedFence[1][0] as FenceState["marker"],
     length: matchedFence[1].length,

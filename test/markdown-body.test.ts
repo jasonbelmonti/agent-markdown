@@ -114,6 +114,48 @@ Document the behavior.
   ]);
 });
 
+test("does not treat invalid backtick fence info strings as fenced blocks", () => {
+  const markdown = `## Objective
+
+\`\`\`js\`bad
+This line stays plain text.
+
+## Notes
+
+This heading must still be detected.
+`;
+
+  expect(parseMarkdownSections(markdown).sections).toEqual([
+    {
+      id: "objective",
+      heading: "Objective",
+      headingPath: ["Objective"],
+      level: 2,
+      order: 0,
+      rawMarkdown: `## Objective
+
+\`\`\`js\`bad
+This line stays plain text.
+
+`,
+      contentMarkdown: `\`\`\`js\`bad
+This line stays plain text.`,
+    },
+    {
+      id: "notes",
+      heading: "Notes",
+      headingPath: ["Notes"],
+      level: 2,
+      order: 1,
+      rawMarkdown: `## Notes
+
+This heading must still be detected.
+`,
+      contentMarkdown: "This heading must still be detected.",
+    },
+  ]);
+});
+
 test("creates stable unique ids for repeated heading paths", () => {
   const markdown = `## Notes
 
