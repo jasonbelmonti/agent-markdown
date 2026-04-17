@@ -235,3 +235,104 @@ Capture a draft before the profile is declared.
     extensions: {},
   });
 });
+
+test("does not apply profile-driven metadata filtering when the declaration is incompatible", () => {
+  const discoveredDocument = readDocumentDeclaration({
+    candidate: {
+      path: "plans/PROJECT.md",
+      discoveryMatches: ["PROJECT.md"],
+      matchedHints: [],
+    },
+    markdown: `---
+doc_spec: agent-markdown/0.1
+doc_kind: project
+doc_profile: task/basic@v1
+title: Keep unresolved metadata raw-only
+status: active
+horizon: q3
+---
+## Objective
+
+Keep candidate documents non-semantic.
+`,
+  });
+  const profileResolution = resolveProfileReference(registry, {
+    doc_spec: discoveredDocument.declaration.docSpec,
+    doc_kind: discoveredDocument.declaration.docKind,
+    doc_profile: discoveredDocument.declaration.docProfile,
+  });
+  const parsedBody = parseMarkdownSections(discoveredDocument.source.rawBodyMarkdown);
+
+  expect(profileResolution.resolved).toBe(false);
+  expect(profileResolution.profile_id).toBe("task/basic@v1");
+
+  expect(
+    composeNormalizedDocument({
+      discoveredDocument,
+      profileResolution,
+      parsedBody,
+    }),
+  ).toEqual({
+    source: {
+      path: "plans/PROJECT.md",
+      contentHash: "",
+      discoveryMatches: ["PROJECT.md"],
+      rawFrontmatter: {
+        doc_spec: "agent-markdown/0.1",
+        doc_kind: "project",
+        doc_profile: "task/basic@v1",
+        title: "Keep unresolved metadata raw-only",
+        status: "active",
+        horizon: "q3",
+      },
+      rawBodyMarkdown: `## Objective
+
+Keep candidate documents non-semantic.
+`,
+    },
+    declaration: {
+      docSpec: "agent-markdown/0.1",
+      docKind: "project",
+      docProfile: "task/basic@v1",
+      title: "Keep unresolved metadata raw-only",
+    },
+    profile: {
+      resolved: false,
+      profileId: "task/basic@v1",
+      profilePath: "profiles/task/basic.profile.md",
+    },
+    metadata: {},
+    body: {
+      sections: [
+        {
+          id: "objective",
+          heading: "Objective",
+          headingPath: ["Objective"],
+          level: 2,
+          order: 0,
+          rawMarkdown: `## Objective
+
+Keep candidate documents non-semantic.
+`,
+          contentMarkdown: "Keep candidate documents non-semantic.",
+        },
+      ],
+    },
+    validation: {
+      conformance: "candidate",
+      errors: [],
+      warnings: [],
+    },
+    affordances: {
+      role: null,
+      actionability: null,
+      normativeSections: [
+        "Objective",
+        "Context / Constraints",
+        "Materially verifiable success criteria",
+        "Execution notes",
+      ],
+    },
+    extensions: {},
+  });
+});
