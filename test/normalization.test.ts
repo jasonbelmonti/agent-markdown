@@ -269,6 +269,74 @@ Keep every required heading present so emptiness is the only failure.
   });
 });
 
+test("requires canonical sections to exist at the top level", () => {
+  const normalized = composeFixture({
+    path: "plans/nested-execution-notes.task.md",
+    discoveryMatches: ["**/*.task.md"],
+    markdown: `---
+doc_spec: agent-markdown/0.1
+doc_kind: task
+doc_profile: task/basic@v1
+title: Keep required sections top-level
+status: ready
+---
+## Objective
+
+Prove nested headings do not satisfy required top-level sections.
+
+### Execution notes
+
+This nested section should not satisfy the task profile contract.
+
+## Context / Constraints
+
+Keep every other required section valid so the placement bug is isolated.
+
+## Materially verifiable success criteria
+
+- [ ] Structural validation rejects nested-only required sections.
+
+`,
+  });
+
+  expect(
+    normalized.body.sections.map((section) => ({
+      heading: section.heading,
+      headingPath: section.headingPath,
+    })),
+  ).toEqual([
+    {
+      heading: "Objective",
+      headingPath: ["Objective"],
+    },
+    {
+      heading: "Execution notes",
+      headingPath: ["Objective", "Execution notes"],
+    },
+    {
+      heading: "Context / Constraints",
+      headingPath: ["Context / Constraints"],
+    },
+    {
+      heading: "Materially verifiable success criteria",
+      headingPath: ["Materially verifiable success criteria"],
+    },
+  ]);
+  expect(normalized.validation).toEqual({
+    conformance: "recognized",
+    errors: [
+      {
+        code: "required-section-missing",
+        severity: "error",
+        message:
+          'Required section "Execution notes" is missing for profile "task/basic@v1".',
+        path: 'body.sections["Execution notes"]',
+      },
+    ],
+    warnings: [],
+  });
+});
+
 test("returns a deterministic degraded envelope when profile resolution is unavailable", () => {
   const discoveredDocument = readDocumentDeclaration({
     candidate: {

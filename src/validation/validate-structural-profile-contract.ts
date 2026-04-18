@@ -15,15 +15,13 @@ export function validateStructuralProfileContract(
   options: StructuralValidationOptions,
 ): ValidationMessage[] {
   const { profile, metadata, bodySections } = options;
-  const sectionByHeading = new Map(
-    bodySections.map((section) => [section.heading, section] as const),
-  );
+  const topLevelSectionByHeading = createTopLevelSectionMap(bodySections);
 
   return [
     ...validateRequiredMetadata(profile, metadata),
-    ...validateRequiredSections(profile, sectionByHeading),
-    ...validateNonemptySections(profile, sectionByHeading),
-    ...validateChecklistRule(profile, sectionByHeading),
+    ...validateRequiredSections(profile, topLevelSectionByHeading),
+    ...validateNonemptySections(profile, topLevelSectionByHeading),
+    ...validateChecklistRule(profile, topLevelSectionByHeading),
   ];
 }
 
@@ -114,6 +112,16 @@ function validateChecklistRule(
       createSectionPath(successCriteriaHeading),
     ),
   ];
+}
+
+function createTopLevelSectionMap(
+  bodySections: NormalizedSection[],
+): Map<string, NormalizedSection> {
+  return new Map(
+    bodySections
+      .filter((section) => section.headingPath.length === 1)
+      .map((section) => [section.heading, section] as const),
+  );
 }
 
 function hasUsableMetadataValue(value: unknown): boolean {
