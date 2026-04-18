@@ -3,6 +3,7 @@ import { resolve as resolvePath } from "node:path";
 
 import {
   collectDiscoveryHints,
+  composeNormalizedDocument,
   discoverDocumentCandidate,
   loadProfileRegistry,
   parseMarkdownSections,
@@ -114,6 +115,17 @@ function assertValidFixture(
   expect(sections.sections.map((section) => section.heading)).toEqual(
     requiredSections,
   );
+  const normalized = composeNormalizedDocument({
+    discoveredDocument: document,
+    profileResolution: resolution,
+    parsedBody: sections,
+  });
+
+  expect(normalized.validation).toEqual({
+    conformance: "structurally_valid",
+    errors: [],
+    warnings: [],
+  });
   const sectionContentByHeading = new Map(
     sections.sections.map((section) => [section.heading, section.contentMarkdown]),
   );

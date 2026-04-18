@@ -3,6 +3,7 @@ import { resolve as resolvePath } from "node:path";
 
 import {
   collectDiscoveryHints,
+  composeNormalizedDocument,
   discoverDocumentCandidate,
   loadProfileRegistry,
   parseMarkdownSections,
@@ -10,6 +11,7 @@ import {
   resolveProfileReference,
   type DocumentDiscoveryHint,
   type LoadedProfileRegistry,
+  type NormalizedValidation,
 } from "../index.ts";
 
 const repoRoot = resolvePath(import.meta.dir, "..");
@@ -69,12 +71,18 @@ async function loadResolvedFixture(path: string) {
     doc_profile: document.declaration.docProfile,
   });
   const sections = parseMarkdownSections(document.source.rawBodyMarkdown);
+  const normalized = composeNormalizedDocument({
+    discoveredDocument: document,
+    profileResolution: resolution,
+    parsedBody: sections,
+  });
 
   return {
     candidate,
     document,
     resolution,
     sections,
+    normalized,
   };
 }
 
@@ -95,10 +103,30 @@ function assertNonemptySections(
   }
 }
 
+function assertValidation(
+  validation: NormalizedValidation,
+  expected: NormalizedValidation,
+) {
+  expect(validation).toEqual(expected);
+}
+
+function createValidationError(
+  code: string,
+  message: string,
+  path: string,
+) {
+  return {
+    code,
+    severity: "error" as const,
+    message,
+    path,
+  };
+}
+
 test("ships a discovered but undeclared task fixture", async () => {
   const fixturePath = "examples/invalid/declaration/undeclared.task.md";
   const taskProfile = registry.profilesById["task/basic@v1"];
-  const { candidate, document, resolution, sections } =
+  const { candidate, document, resolution, sections, normalized } =
     await loadResolvedFixture(fixturePath);
   const sectionContentByHeading = createSectionContentMap(sections);
 
@@ -111,6 +139,11 @@ test("ships a discovered but undeclared task fixture", async () => {
   expect(resolution.resolved).toBe(false);
   expect(resolution.reason).toBe("undeclared_profile");
   expect(resolution.profile).toBeNull();
+  assertValidation(normalized.validation, {
+    conformance: "candidate",
+    errors: [],
+    warnings: [],
+  });
   expect(sections.sections.map((section) => section.heading)).toEqual(
     taskProfile.body.required_sections,
   );
@@ -142,7 +175,7 @@ test("ships a malformed-frontmatter fixture that fails before declaration decodi
 test("ships an unknown-profile fixture with an otherwise valid task shape", async () => {
   const fixturePath = "examples/invalid/profile/unknown-profile.task.md";
   const taskProfile = registry.profilesById["task/basic@v1"];
-  const { candidate, document, resolution, sections } =
+  const { candidate, document, resolution, sections, normalized } =
     await loadResolvedFixture(fixturePath);
   const sectionContentByHeading = createSectionContentMap(sections);
 
@@ -154,6 +187,11 @@ test("ships an unknown-profile fixture with an otherwise valid task shape", asyn
   expect(resolution.reason).toBe("unknown_profile");
   expect(resolution.profile_id).toBeNull();
   expect(resolution.profile).toBeNull();
+  assertValidation(normalized.validation, {
+    conformance: "candidate",
+    errors: [],
+    warnings: [],
+  });
   expect(resolution.reference.doc_spec).toBe("agent-markdown/0.1");
   expect(resolution.reference.doc_kind).toBe("task");
   expect(resolution.reference.doc_profile).toBe("task/experimental@v9");
@@ -173,7 +211,7 @@ test("ships a project fixture that is missing exactly one required section", asy
   const fixturePath =
     "examples/invalid/body/missing-success-measures.project.md";
   const projectProfile = registry.profilesById["project/basic@v1"];
-  const { candidate, document, resolution, sections } =
+  const { candidate, document, resolution, sections, normalized } =
     await loadResolvedFixture(fixturePath);
   const sectionHeadings = sections.sections.map((section) => section.heading);
   const sectionContentByHeading = createSectionContentMap(sections);
@@ -188,6 +226,17 @@ test("ships a project fixture that is missing exactly one required section", asy
   expect(resolution.resolved).toBe(true);
   expect(resolution.reason).toBeNull();
   expect(resolution.profile_id).toBe("project/basic@v1");
+  assertValidation(normalized.validation, {
+    conformance: "recognized",
+    errors: [
+      createValidationError(
+        "required-section-missing",
+        'Required section "Success measures" is missing for profile "project/basic@v1".',
+        'body.sections["Success measures"]',
+      ),
+    ],
+    warnings: [],
+  });
   expect(missingRequiredSections).toEqual(["Success measures"]);
   expect(sectionHeadings).toEqual(
     projectProfile.body.required_sections.filter(
@@ -207,7 +256,7 @@ test("ships a task fixture that violates the checklist contract without missing 
   const fixturePath =
     "examples/invalid/contract/success-criteria-not-checklist.task.md";
   const taskProfile = registry.profilesById["task/basic@v1"];
-  const { candidate, document, resolution, sections } =
+  const { candidate, document, resolution, sections, normalized } =
     await loadResolvedFixture(fixturePath);
   const sectionContentByHeading = createSectionContentMap(sections);
   const successCriteriaSection = sectionContentByHeading.get(successCriteriaHeading);
@@ -219,6 +268,17 @@ test("ships a task fixture that violates the checklist contract without missing 
   expect(resolution.resolved).toBe(true);
   expect(resolution.reason).toBeNull();
   expect(resolution.profile_id).toBe("task/basic@v1");
+  assertValidation(normalized.validation, {
+    conformance: "recognized",
+    errors: [
+      createValidationError(
+        "checklist-required",
+        'Section "Materially verifiable success criteria" must contain checklist items for profile "task/basic@v1".',
+        'body.sections["Materially verifiable success criteria"]',
+      ),
+    ],
+    warnings: [],
+  });
   expect(sections.sections.map((section) => section.heading)).toEqual(
     taskProfile.body.required_sections,
   );
