@@ -355,12 +355,14 @@ Keep checklist validation aligned with Markdown task-list syntax.
 
 ## Context / Constraints
 
-The validator should accept bullet markers other than \`-\` and indented task items.
+The validator should accept bullet markers other than \`-\`, indented task
+items, and ordered task-list markers.
 
 ## Materially verifiable success criteria
 
 * [ ] The validator accepts star-prefixed task items.
   + [ ] The validator also accepts indented plus-prefixed task items.
+1. [ ] The validator accepts ordered task-list items.
 
 ## Execution notes
 
@@ -370,6 +372,53 @@ Limit the implementation to structural checklist detection.
   ).toEqual({
     conformance: "structurally_valid",
     errors: [],
+    warnings: [],
+  });
+});
+
+test("ignores checklist-like text inside indented code blocks", () => {
+  expect(
+    composeFixture({
+      path: "plans/indented-code-checklist-example.task.md",
+      discoveryMatches: ["**/*.task.md"],
+      markdown: `---
+doc_spec: agent-markdown/0.1
+doc_kind: task
+doc_profile: task/basic@v1
+title: Ignore indented code checklist examples
+status: ready
+---
+## Objective
+
+Keep indented code samples from satisfying task checklist validation.
+
+## Context / Constraints
+
+The section should otherwise stay valid so the indentation behavior is isolated.
+
+## Materially verifiable success criteria
+
+    - [ ] This is an indented code sample.
+    1. [ ] This ordered example is also code, not a checklist item.
+
+- Criteria are described in prose afterward without real checklist markers.
+
+## Execution notes
+
+Use indented code as the only source of checklist syntax in this section.
+`,
+    }).validation,
+  ).toEqual({
+    conformance: "recognized",
+    errors: [
+      {
+        code: "checklist-required",
+        severity: "error",
+        message:
+          'Section "Materially verifiable success criteria" must contain checklist items for profile "task/basic@v1".',
+        path: 'body.sections["Materially verifiable success criteria"]',
+      },
+    ],
     warnings: [],
   });
 });

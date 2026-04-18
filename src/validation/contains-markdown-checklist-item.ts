@@ -7,7 +7,8 @@ interface FenceState {
   length: number;
 }
 
-const checklistItemPattern = /^[ \t]*[*+-][ \t]+\[(?: |x|X)\](?:[ \t]+|$)/u;
+const checklistItemPattern =
+  /^ {0,3}(?:[*+-]|\d+[.)])[ \t]+\[(?: |x|X)\](?:[ \t]+|$)/u;
 
 export function containsMarkdownChecklistItem(markdown: string): boolean {
   let openFence: FenceState | null = null;
