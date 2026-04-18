@@ -1,9 +1,9 @@
 import type { LoadedProfileDocument } from "../core-model/profiles.ts";
 import type { NormalizedSection } from "../core-model/sections.ts";
 import type { ValidationMessage } from "../core-model/validation.ts";
+import { containsMarkdownChecklistItem } from "./contains-markdown-checklist-item.ts";
 
 const successCriteriaHeading = "Materially verifiable success criteria";
-const checklistItemPattern = /(^|\n)- \[(?: |x|X)\] /u;
 
 export interface StructuralValidationOptions {
   profile: LoadedProfileDocument;
@@ -98,10 +98,7 @@ function validateChecklistRule(
 
   const section = sectionByHeading.get(successCriteriaHeading);
 
-  if (
-    section === undefined ||
-    checklistItemPattern.test(section.contentMarkdown)
-  ) {
+  if (section === undefined || containsMarkdownChecklistItem(section.contentMarkdown)) {
     return [];
   }
 

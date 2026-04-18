@@ -337,6 +337,92 @@ Keep every other required section valid so the placement bug is isolated.
   });
 });
 
+test("accepts markdown checklist markers beyond top-level dash bullets", () => {
+  expect(
+    composeFixture({
+      path: "plans/variant-checklists.task.md",
+      discoveryMatches: ["**/*.task.md"],
+      markdown: `---
+doc_spec: agent-markdown/0.1
+doc_kind: task
+doc_profile: task/basic@v1
+title: Accept markdown checklist variants
+status: ready
+---
+## Objective
+
+Keep checklist validation aligned with Markdown task-list syntax.
+
+## Context / Constraints
+
+The validator should accept bullet markers other than \`-\` and indented task items.
+
+## Materially verifiable success criteria
+
+* [ ] The validator accepts star-prefixed task items.
+  + [ ] The validator also accepts indented plus-prefixed task items.
+
+## Execution notes
+
+Limit the implementation to structural checklist detection.
+`,
+    }).validation,
+  ).toEqual({
+    conformance: "structurally_valid",
+    errors: [],
+    warnings: [],
+  });
+});
+
+test("ignores checklist-like text inside fenced code blocks", () => {
+  expect(
+    composeFixture({
+      path: "plans/fenced-checklist-example.task.md",
+      discoveryMatches: ["**/*.task.md"],
+      markdown: `---
+doc_spec: agent-markdown/0.1
+doc_kind: task
+doc_profile: task/basic@v1
+title: Ignore fenced checklist examples
+status: ready
+---
+## Objective
+
+Keep code samples from satisfying task checklist validation.
+
+## Context / Constraints
+
+The section should otherwise stay valid so the fence behavior is isolated.
+
+## Materially verifiable success criteria
+
+\`\`\`md
+- [ ] This is only a code sample.
+* [ ] This should not satisfy validation either.
+\`\`\`
+
+- Criteria are described in prose afterward without real checklist markers.
+
+## Execution notes
+
+Use fenced code as the only source of checklist syntax in this section.
+`,
+    }).validation,
+  ).toEqual({
+    conformance: "recognized",
+    errors: [
+      {
+        code: "checklist-required",
+        severity: "error",
+        message:
+          'Section "Materially verifiable success criteria" must contain checklist items for profile "task/basic@v1".',
+        path: 'body.sections["Materially verifiable success criteria"]',
+      },
+    ],
+    warnings: [],
+  });
+});
+
 test("returns a deterministic degraded envelope when profile resolution is unavailable", () => {
   const discoveredDocument = readDocumentDeclaration({
     candidate: {
