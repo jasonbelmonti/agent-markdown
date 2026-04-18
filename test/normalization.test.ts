@@ -269,6 +269,44 @@ Keep every required heading present so emptiness is the only failure.
   });
 });
 
+test("treats required sections with only nested subsection content as nonempty", () => {
+  expect(
+    composeFixture({
+      path: "plans/nested-execution-content.task.md",
+      discoveryMatches: ["**/*.task.md"],
+      markdown: `---
+doc_spec: agent-markdown/0.1
+doc_kind: task
+doc_profile: task/basic@v1
+title: Count nested subsection content
+status: ready
+---
+## Objective
+
+Keep structural emptiness checks aligned with section subtrees.
+
+## Context / Constraints
+
+Only nested subsection content should satisfy the execution-notes content rule.
+
+## Materially verifiable success criteria
+
+- [ ] Nested subsection content counts as nonempty for required sections.
+
+## Execution notes
+
+### Implementation detail
+
+This nested subsection carries the only execution-notes content.
+`,
+    }).validation,
+  ).toEqual({
+    conformance: "structurally_valid",
+    errors: [],
+    warnings: [],
+  });
+});
+
 test("requires canonical sections to exist at the top level", () => {
   const normalized = composeFixture({
     path: "plans/nested-execution-notes.task.md",
@@ -337,6 +375,44 @@ Keep every other required section valid so the placement bug is isolated.
   });
 });
 
+test("accepts checklist items inside nested success-criteria subsections", () => {
+  expect(
+    composeFixture({
+      path: "plans/nested-success-criteria-checklist.task.md",
+      discoveryMatches: ["**/*.task.md"],
+      markdown: `---
+doc_spec: agent-markdown/0.1
+doc_kind: task
+doc_profile: task/basic@v1
+title: Count nested success-criteria checklists
+status: ready
+---
+## Objective
+
+Keep checklist validation aligned with section subtrees.
+
+## Context / Constraints
+
+The only checklist items in this section live under a nested subsection.
+
+## Materially verifiable success criteria
+
+### Verification checklist
+
+- [ ] Nested checklist items satisfy the structural checklist rule.
+
+## Execution notes
+
+Do not require checklist markers to appear directly under the top-level heading.
+`,
+    }).validation,
+  ).toEqual({
+    conformance: "structurally_valid",
+    errors: [],
+    warnings: [],
+  });
+});
+
 test("accepts markdown checklist markers beyond top-level dash bullets", () => {
   expect(
     composeFixture({
@@ -367,6 +443,43 @@ items, and ordered task-list markers.
 ## Execution notes
 
 Limit the implementation to structural checklist detection.
+`,
+    }).validation,
+  ).toEqual({
+    conformance: "structurally_valid",
+    errors: [],
+    warnings: [],
+  });
+});
+
+test("accepts checklist items nested under non-checklist list items", () => {
+  expect(
+    composeFixture({
+      path: "plans/nested-list-checklists.task.md",
+      discoveryMatches: ["**/*.task.md"],
+      markdown: `---
+doc_spec: agent-markdown/0.1
+doc_kind: task
+doc_profile: task/basic@v1
+title: Accept nested checklist list items
+status: ready
+---
+## Objective
+
+Keep checklist detection aligned with nested Markdown lists.
+
+## Context / Constraints
+
+The only checklist items in this section are nested underneath a parent list item.
+
+## Materially verifiable success criteria
+
+- Parent item
+    1. [ ] Nested ordered checklist items remain valid.
+
+## Execution notes
+
+Limit the fix to structural checklist detection.
 `,
     }).validation,
   ).toEqual({
@@ -419,6 +532,44 @@ Use indented code as the only source of checklist syntax in this section.
         path: 'body.sections["Materially verifiable success criteria"]',
       },
     ],
+    warnings: [],
+  });
+});
+
+test("treats duplicate top-level headings deterministically", () => {
+  expect(
+    composeFixture({
+      path: "plans/duplicate-execution-notes.task.md",
+      discoveryMatches: ["**/*.task.md"],
+      markdown: `---
+doc_spec: agent-markdown/0.1
+doc_kind: task
+doc_profile: task/basic@v1
+title: Ignore duplicate heading order
+status: ready
+---
+## Objective
+
+Keep duplicate required headings from changing conformance by order alone.
+
+## Context / Constraints
+
+One duplicate execution-notes heading is nonempty and the later duplicate is empty.
+
+## Materially verifiable success criteria
+
+- [ ] Structural validation aggregates duplicate top-level headings deterministically.
+
+## Execution notes
+
+This first duplicate contains the required content.
+
+## Execution notes
+`,
+    }).validation,
+  ).toEqual({
+    conformance: "structurally_valid",
+    errors: [],
     warnings: [],
   });
 });

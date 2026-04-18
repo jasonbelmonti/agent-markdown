@@ -15,13 +15,13 @@ export function validateStructuralProfileContract(
   options: StructuralValidationOptions,
 ): ValidationMessage[] {
   const { profile, metadata, bodySections } = options;
-  const topLevelSectionByHeading = createTopLevelSectionMap(bodySections);
+  const sectionsByTopLevelHeading = createSectionsByTopLevelHeading(bodySections);
 
   return [
     ...validateRequiredMetadata(profile, metadata),
-    ...validateRequiredSections(profile, topLevelSectionByHeading),
-    ...validateNonemptySections(profile, topLevelSectionByHeading),
-    ...validateChecklistRule(profile, topLevelSectionByHeading),
+    ...validateRequiredSections(profile, sectionsByTopLevelHeading),
+    ...validateNonemptySections(profile, sectionsByTopLevelHeading),
+    ...validateChecklistRule(profile, sectionsByTopLevelHeading),
   ];
 }
 
@@ -46,14 +46,14 @@ function validateRequiredMetadata(
 
 function validateRequiredSections(
   profile: LoadedProfileDocument,
-  sectionByHeading: Map<string, NormalizedSection>,
+  sectionsByTopLevelHeading: Map<string, NormalizedSection[]>,
 ): ValidationMessage[] {
   if (!profile.validation.require_required_sections) {
     return [];
   }
 
   return profile.body.required_sections.flatMap((heading) => {
-    if (sectionByHeading.has(heading)) {
+    if (sectionsByTopLevelHeading.has(heading)) {
       return [];
     }
 
@@ -69,12 +69,12 @@ function validateRequiredSections(
 
 function validateNonemptySections(
   profile: LoadedProfileDocument,
-  sectionByHeading: Map<string, NormalizedSection>,
+  sectionsByTopLevelHeading: Map<string, NormalizedSection[]>,
 ): ValidationMessage[] {
   return (profile.validation.require_nonempty_sections ?? []).flatMap((heading) => {
-    const section = sectionByHeading.get(heading);
+    const sections = sectionsByTopLevelHeading.get(heading);
 
-    if (section === undefined || section.contentMarkdown.trim().length > 0) {
+    if (sections === undefined || sections.some(hasNonemptyContent)) {
       return [];
     }
 
@@ -90,15 +90,18 @@ function validateNonemptySections(
 
 function validateChecklistRule(
   profile: LoadedProfileDocument,
-  sectionByHeading: Map<string, NormalizedSection>,
+  sectionsByTopLevelHeading: Map<string, NormalizedSection[]>,
 ): ValidationMessage[] {
   if (!profile.validation.require_checklist_in_success_criteria) {
     return [];
   }
 
-  const section = sectionByHeading.get(successCriteriaHeading);
+  const sections = sectionsByTopLevelHeading.get(successCriteriaHeading);
 
-  if (section === undefined || containsMarkdownChecklistItem(section.contentMarkdown)) {
+  if (
+    sections === undefined ||
+    sections.some((section) => containsMarkdownChecklistItem(section.contentMarkdown))
+  ) {
     return [];
   }
 
@@ -111,14 +114,29 @@ function validateChecklistRule(
   ];
 }
 
-function createTopLevelSectionMap(
+function createSectionsByTopLevelHeading(
   bodySections: NormalizedSection[],
-): Map<string, NormalizedSection> {
-  return new Map(
-    bodySections
-      .filter((section) => section.headingPath.length === 1)
-      .map((section) => [section.heading, section] as const),
-  );
+): Map<string, NormalizedSection[]> {
+  const sectionsByTopLevelHeading = new Map<string, NormalizedSection[]>();
+
+  for (const section of bodySections) {
+    const topLevelHeading = section.headingPath[0];
+
+    if (topLevelHeading === undefined) {
+      continue;
+    }
+
+    const groupedSections = sectionsByTopLevelHeading.get(topLevelHeading);
+
+    if (groupedSections === undefined) {
+      sectionsByTopLevelHeading.set(topLevelHeading, [section]);
+      continue;
+    }
+
+    groupedSections.push(section);
+  }
+
+  return sectionsByTopLevelHeading;
 }
 
 function hasUsableMetadataValue(value: unknown): boolean {
@@ -135,6 +153,10 @@ function hasUsableMetadataValue(value: unknown): boolean {
 
 function createSectionPath(heading: string): string {
   return `body.sections["${heading}"]`;
+}
+
+function hasNonemptyContent(section: NormalizedSection): boolean {
+  return section.contentMarkdown.trim().length > 0;
 }
 
 function createError(
