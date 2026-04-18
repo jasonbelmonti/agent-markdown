@@ -27,7 +27,12 @@ export function composeNormalizedDocument(
   } = options;
   const { source, declaration } = discoveredDocument;
   const resolvedProfile = profileResolution.resolved ? profileResolution.profile : null;
-  const validation = createNormalizedValidation(profileResolution);
+  const metadata = normalizeProfileMetadata(resolvedProfile, source.rawFrontmatter);
+  const validation = createNormalizedValidation({
+    profileResolution,
+    metadata,
+    bodySections: parsedBody.sections,
+  });
 
   return {
     source: {
@@ -45,7 +50,7 @@ export function composeNormalizedDocument(
       profileId: profileResolution.profile_id,
       profilePath: profileResolution.profile_path,
     },
-    metadata: normalizeProfileMetadata(resolvedProfile, source.rawFrontmatter),
+    metadata,
     body: {
       sections: cloneSections(parsedBody),
     },

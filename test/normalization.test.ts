@@ -7,6 +7,7 @@ import {
   parseMarkdownSections,
   readDocumentDeclaration,
   resolveProfileReference,
+  type NormalizedDocument,
   type LoadedProfileRegistry,
 } from "../index.ts";
 
@@ -18,14 +19,45 @@ beforeAll(async () => {
   registry = await loadProfileRegistry({ repoRoot });
 });
 
-test("composes a normalized envelope from resolved declaration, profile, metadata, and body seams", () => {
+interface ComposeFixtureOptions {
+  path: string;
+  discoveryMatches: string[];
+  markdown: string;
+  contentHash?: string;
+}
+
+function composeFixture(options: ComposeFixtureOptions): NormalizedDocument {
+  const { path, discoveryMatches, markdown, contentHash } = options;
   const discoveredDocument = readDocumentDeclaration({
     candidate: {
-      path: "plans/TASK.md",
-      discoveryMatches: ["TASK.md"],
+      path,
+      discoveryMatches,
       matchedHints: [],
     },
-    markdown: `---
+    markdown,
+  });
+  const profileResolution = resolveProfileReference(registry, {
+    doc_spec: discoveredDocument.declaration.docSpec,
+    doc_kind: discoveredDocument.declaration.docKind,
+    doc_profile: discoveredDocument.declaration.docProfile,
+  });
+  const parsedBody = parseMarkdownSections(discoveredDocument.source.rawBodyMarkdown);
+
+  return composeNormalizedDocument({
+    discoveredDocument,
+    profileResolution,
+    parsedBody,
+    contentHash,
+  });
+}
+
+test("composes a normalized envelope from resolved declaration, profile, metadata, and body seams", () => {
+  expect(
+    composeFixture({
+      path: "plans/TASK.md",
+      discoveryMatches: ["TASK.md"],
+      contentHash: "sha256:test-normalized-envelope",
+      markdown: `---
 doc_spec: agent-markdown/0.1
 doc_kind: task
 doc_profile: task/basic@v1
@@ -45,20 +77,6 @@ Build the shared normalized envelope.
 
 Wire together the landed seams without mixing in validation.
 `,
-  });
-  const profileResolution = resolveProfileReference(registry, {
-    doc_spec: discoveredDocument.declaration.docSpec,
-    doc_kind: discoveredDocument.declaration.docKind,
-    doc_profile: discoveredDocument.declaration.docProfile,
-  });
-  const parsedBody = parseMarkdownSections(discoveredDocument.source.rawBodyMarkdown);
-
-  expect(
-    composeNormalizedDocument({
-      discoveredDocument,
-      profileResolution,
-      parsedBody,
-      contentHash: "sha256:test-normalized-envelope",
     }),
   ).toEqual({
     source: {
@@ -133,7 +151,22 @@ Wire together the landed seams without mixing in validation.
     },
     validation: {
       conformance: "recognized",
-      errors: [],
+      errors: [
+        {
+          code: "required-section-missing",
+          severity: "error",
+          message:
+            'Required section "Context / Constraints" is missing for profile "task/basic@v1".',
+          path: 'body.sections["Context / Constraints"]',
+        },
+        {
+          code: "required-section-missing",
+          severity: "error",
+          message:
+            'Required section "Materially verifiable success criteria" is missing for profile "task/basic@v1".',
+          path: 'body.sections["Materially verifiable success criteria"]',
+        },
+      ],
       warnings: [],
     },
     affordances: {
@@ -147,6 +180,295 @@ Wire together the landed seams without mixing in validation.
       ],
     },
     extensions: {},
+  });
+});
+
+test("keeps resolved documents below structural validity when required metadata is missing", () => {
+  expect(
+    composeFixture({
+      path: "plans/missing-title.task.md",
+      discoveryMatches: ["**/*.task.md"],
+      markdown: `---
+doc_spec: agent-markdown/0.1
+doc_kind: task
+doc_profile: task/basic@v1
+status: ready
+---
+## Objective
+
+Prove missing required metadata stays structural.
+
+## Context / Constraints
+
+Keep the body otherwise valid so the missing title is isolated.
+
+## Materially verifiable success criteria
+
+- [ ] The document resolves its declared profile.
+- [ ] Structural validation reports the missing title deterministically.
+
+## Execution notes
+
+Do not introduce unrelated validation failures.
+`,
+    }).validation,
+  ).toEqual({
+    conformance: "recognized",
+    errors: [
+      {
+        code: "required-metadata-missing",
+        severity: "error",
+        message:
+          'Required metadata field "title" is missing or invalid for profile "task/basic@v1".',
+        path: "metadata.title",
+      },
+    ],
+    warnings: [],
+  });
+});
+
+test("reports empty required sections without duplicating missing-section errors", () => {
+  expect(
+    composeFixture({
+      path: "plans/empty-execution-notes.task.md",
+      discoveryMatches: ["**/*.task.md"],
+      markdown: `---
+doc_spec: agent-markdown/0.1
+doc_kind: task
+doc_profile: task/basic@v1
+title: Keep empty sections structural
+status: ready
+---
+## Objective
+
+Prove empty required sections stay in structural validation.
+
+## Context / Constraints
+
+Keep every required heading present so emptiness is the only failure.
+
+## Materially verifiable success criteria
+
+- [ ] Structural validation treats an empty section as present but invalid.
+
+## Execution notes
+`,
+    }).validation,
+  ).toEqual({
+    conformance: "recognized",
+    errors: [
+      {
+        code: "required-section-empty",
+        severity: "error",
+        message:
+          'Required section "Execution notes" must not be empty for profile "task/basic@v1".',
+        path: 'body.sections["Execution notes"]',
+      },
+    ],
+    warnings: [],
+  });
+});
+
+test("requires canonical sections to exist at the top level", () => {
+  const normalized = composeFixture({
+    path: "plans/nested-execution-notes.task.md",
+    discoveryMatches: ["**/*.task.md"],
+    markdown: `---
+doc_spec: agent-markdown/0.1
+doc_kind: task
+doc_profile: task/basic@v1
+title: Keep required sections top-level
+status: ready
+---
+## Objective
+
+Prove nested headings do not satisfy required top-level sections.
+
+### Execution notes
+
+This nested section should not satisfy the task profile contract.
+
+## Context / Constraints
+
+Keep every other required section valid so the placement bug is isolated.
+
+## Materially verifiable success criteria
+
+- [ ] Structural validation rejects nested-only required sections.
+
+`,
+  });
+
+  expect(
+    normalized.body.sections.map((section) => ({
+      heading: section.heading,
+      headingPath: section.headingPath,
+    })),
+  ).toEqual([
+    {
+      heading: "Objective",
+      headingPath: ["Objective"],
+    },
+    {
+      heading: "Execution notes",
+      headingPath: ["Objective", "Execution notes"],
+    },
+    {
+      heading: "Context / Constraints",
+      headingPath: ["Context / Constraints"],
+    },
+    {
+      heading: "Materially verifiable success criteria",
+      headingPath: ["Materially verifiable success criteria"],
+    },
+  ]);
+  expect(normalized.validation).toEqual({
+    conformance: "recognized",
+    errors: [
+      {
+        code: "required-section-missing",
+        severity: "error",
+        message:
+          'Required section "Execution notes" is missing for profile "task/basic@v1".',
+        path: 'body.sections["Execution notes"]',
+      },
+    ],
+    warnings: [],
+  });
+});
+
+test("accepts markdown checklist markers beyond top-level dash bullets", () => {
+  expect(
+    composeFixture({
+      path: "plans/variant-checklists.task.md",
+      discoveryMatches: ["**/*.task.md"],
+      markdown: `---
+doc_spec: agent-markdown/0.1
+doc_kind: task
+doc_profile: task/basic@v1
+title: Accept markdown checklist variants
+status: ready
+---
+## Objective
+
+Keep checklist validation aligned with Markdown task-list syntax.
+
+## Context / Constraints
+
+The validator should accept bullet markers other than \`-\`, indented task
+items, and ordered task-list markers.
+
+## Materially verifiable success criteria
+
+* [ ] The validator accepts star-prefixed task items.
+  + [ ] The validator also accepts indented plus-prefixed task items.
+1. [ ] The validator accepts ordered task-list items.
+
+## Execution notes
+
+Limit the implementation to structural checklist detection.
+`,
+    }).validation,
+  ).toEqual({
+    conformance: "structurally_valid",
+    errors: [],
+    warnings: [],
+  });
+});
+
+test("ignores checklist-like text inside indented code blocks", () => {
+  expect(
+    composeFixture({
+      path: "plans/indented-code-checklist-example.task.md",
+      discoveryMatches: ["**/*.task.md"],
+      markdown: `---
+doc_spec: agent-markdown/0.1
+doc_kind: task
+doc_profile: task/basic@v1
+title: Ignore indented code checklist examples
+status: ready
+---
+## Objective
+
+Keep indented code samples from satisfying task checklist validation.
+
+## Context / Constraints
+
+The section should otherwise stay valid so the indentation behavior is isolated.
+
+## Materially verifiable success criteria
+
+    - [ ] This is an indented code sample.
+    1. [ ] This ordered example is also code, not a checklist item.
+
+- Criteria are described in prose afterward without real checklist markers.
+
+## Execution notes
+
+Use indented code as the only source of checklist syntax in this section.
+`,
+    }).validation,
+  ).toEqual({
+    conformance: "recognized",
+    errors: [
+      {
+        code: "checklist-required",
+        severity: "error",
+        message:
+          'Section "Materially verifiable success criteria" must contain checklist items for profile "task/basic@v1".',
+        path: 'body.sections["Materially verifiable success criteria"]',
+      },
+    ],
+    warnings: [],
+  });
+});
+
+test("ignores checklist-like text inside fenced code blocks", () => {
+  expect(
+    composeFixture({
+      path: "plans/fenced-checklist-example.task.md",
+      discoveryMatches: ["**/*.task.md"],
+      markdown: `---
+doc_spec: agent-markdown/0.1
+doc_kind: task
+doc_profile: task/basic@v1
+title: Ignore fenced checklist examples
+status: ready
+---
+## Objective
+
+Keep code samples from satisfying task checklist validation.
+
+## Context / Constraints
+
+The section should otherwise stay valid so the fence behavior is isolated.
+
+## Materially verifiable success criteria
+
+\`\`\`md
+- [ ] This is only a code sample.
+* [ ] This should not satisfy validation either.
+\`\`\`
+
+- Criteria are described in prose afterward without real checklist markers.
+
+## Execution notes
+
+Use fenced code as the only source of checklist syntax in this section.
+`,
+    }).validation,
+  ).toEqual({
+    conformance: "recognized",
+    errors: [
+      {
+        code: "checklist-required",
+        severity: "error",
+        message:
+          'Section "Materially verifiable success criteria" must contain checklist items for profile "task/basic@v1".',
+        path: 'body.sections["Materially verifiable success criteria"]',
+      },
+    ],
+    warnings: [],
   });
 });
 
