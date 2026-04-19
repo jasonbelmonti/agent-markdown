@@ -15,6 +15,8 @@ interface ListItemMatch {
 
 const listItemPattern =
   /^([ \t]*)([*+-]|\d+[.)])([ \t]+)(\[(?: |x|X)\](?:[ \t]+|$))?/u;
+const htmlBlockStartPattern =
+  /^ {0,3}<(?:\/?(?:address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|figcaption|figure|footer|form|frame|frameset|h[1-6]|head|header|hr|html|iframe|legend|li|link|main|menu|menuitem|nav|noframes|ol|optgroup|option|p|param|search|section|summary|table|tbody|td|tfoot|th|thead|title|tr|track|ul)\b|!--|!\[CDATA\[|\?)/u;
 
 export function containsMarkdownChecklistItem(markdown: string): boolean {
   let openFence: FenceState | null = null;
@@ -184,7 +186,13 @@ function readIndentationWidth(indentation: string): number {
   let width = 0;
 
   for (const character of indentation) {
-    width += character === "\t" ? 4 : 1;
+    if (character === "\t") {
+      const remainder = width % 4;
+      width += remainder === 0 ? 4 : 4 - remainder;
+      continue;
+    }
+
+    width += 1;
   }
 
   return width;
@@ -265,6 +273,7 @@ function startsBlockOutsideParagraph(line: string): boolean {
   return (
     /^ {0,3}>/u.test(line) ||
     /^ {0,3}#{1,6}(?:[ \t]+|$)/u.test(line) ||
-    /^ {0,3}(?:-{3,}|_{3,}|\*{3,})(?:[ \t]*[-_*][ \t]*)*$/u.test(line)
+    /^ {0,3}(?:-{3,}|_{3,}|\*{3,})(?:[ \t]*[-_*][ \t]*)*$/u.test(line) ||
+    htmlBlockStartPattern.test(line)
   );
 }

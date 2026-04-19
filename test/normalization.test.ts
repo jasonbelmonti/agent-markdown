@@ -565,6 +565,43 @@ Limit the fix to lazy continuation handling in checklist detection.
   });
 });
 
+test("treats mixed space-tab indentation using markdown tab stops", () => {
+  expect(
+    composeFixture({
+      path: "plans/mixed-tab-stop-checklists.task.md",
+      discoveryMatches: ["**/*.task.md"],
+      markdown: `---
+doc_spec: agent-markdown/0.1
+doc_kind: task
+doc_profile: task/basic@v1
+title: Respect markdown tab stops in checklist indentation
+status: ready
+---
+## Objective
+
+Keep checklist indentation aligned with Markdown tab stops.
+
+## Context / Constraints
+
+The child checklist item begins with two spaces and a tab, which lands on column 4 and should remain nested under the parent list item.
+
+## Materially verifiable success criteria
+
+- Parent item
+  \t- [ ] Mixed indentation still counts as a nested checklist item.
+
+## Execution notes
+
+Limit the fix to indentation width calculation in checklist detection.
+`,
+    }).validation,
+  ).toEqual({
+    conformance: "semantically_valid",
+    errors: [],
+    warnings: [],
+  });
+});
+
 test("does not keep list context across thematic breaks", () => {
   expect(
     composeFixture({
@@ -594,6 +631,52 @@ Thematic breaks should terminate list context before later indented checklist-lo
 ## Execution notes
 
 Limit the fix to lazy continuation block-starter handling.
+`,
+    }).validation,
+  ).toEqual({
+    conformance: "recognized",
+    errors: [
+      {
+        code: "checklist-required",
+        severity: "error",
+        message:
+          'Section "Materially verifiable success criteria" must contain checklist items for profile "task/basic@v1".',
+        path: 'body.sections["Materially verifiable success criteria"]',
+      },
+    ],
+    warnings: [],
+  });
+});
+
+test("does not keep list context across html block starts", () => {
+  expect(
+    composeFixture({
+      path: "plans/list-html-block-checklists.task.md",
+      discoveryMatches: ["**/*.task.md"],
+      markdown: `---
+doc_spec: agent-markdown/0.1
+doc_kind: task
+doc_profile: task/basic@v1
+title: Stop list context at html block starts
+status: ready
+---
+## Objective
+
+Keep lazy continuation handling from crossing HTML block starts.
+
+## Context / Constraints
+
+An HTML block start like <details> should terminate lazy continuation before a later indented checklist-looking line.
+
+## Materially verifiable success criteria
+
+10. Parent item
+<details>
+    - [ ] This line should not count after the html block starts.
+
+## Execution notes
+
+Limit the fix to html-block handling in checklist detection.
 `,
     }).validation,
   ).toEqual({
