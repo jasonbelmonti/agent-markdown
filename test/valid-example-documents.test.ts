@@ -122,9 +122,14 @@ function assertValidFixture(
   });
 
   expect(normalized.validation).toEqual({
-    conformance: "structurally_valid",
+    conformance: "semantically_valid",
     errors: [],
     warnings: [],
+  });
+  expect(normalized.affordances).toEqual({
+    role: resolution.profile.affordances.role,
+    actionability: resolution.profile.affordances.actionability,
+    normativeSections: [...resolution.profile.affordances.normative_sections],
   });
   const sectionContentByHeading = new Map(
     sections.sections.map((section) => [section.heading, section.contentMarkdown]),

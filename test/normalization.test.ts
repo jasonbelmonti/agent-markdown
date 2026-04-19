@@ -7,8 +7,8 @@ import {
   parseMarkdownSections,
   readDocumentDeclaration,
   resolveProfileReference,
-  type NormalizedDocument,
   type LoadedProfileRegistry,
+  type NormalizedDocument,
 } from "../index.ts";
 
 const repoRoot = resolvePath(import.meta.dir, "..");
@@ -27,7 +27,20 @@ interface ComposeFixtureOptions {
 }
 
 function composeFixture(options: ComposeFixtureOptions): NormalizedDocument {
-  const { path, discoveryMatches, markdown, contentHash } = options;
+  const { contentHash } = options;
+  const { discoveredDocument, profileResolution, parsedBody } =
+    createResolvedFixture(options);
+
+  return composeNormalizedDocument({
+    discoveredDocument,
+    profileResolution,
+    parsedBody,
+    contentHash,
+  });
+}
+
+function createResolvedFixture(options: ComposeFixtureOptions) {
+  const { path, discoveryMatches, markdown } = options;
   const discoveredDocument = readDocumentDeclaration({
     candidate: {
       path,
@@ -43,12 +56,11 @@ function composeFixture(options: ComposeFixtureOptions): NormalizedDocument {
   });
   const parsedBody = parseMarkdownSections(discoveredDocument.source.rawBodyMarkdown);
 
-  return composeNormalizedDocument({
+  return {
     discoveredDocument,
     profileResolution,
     parsedBody,
-    contentHash,
-  });
+  };
 }
 
 test("composes a normalized envelope from resolved declaration, profile, metadata, and body seams", () => {
@@ -370,9 +382,66 @@ Limit the implementation to structural checklist detection.
 `,
     }).validation,
   ).toEqual({
-    conformance: "structurally_valid",
+    conformance: "semantically_valid",
     errors: [],
     warnings: [],
+  });
+});
+
+test("keeps duplicate top-level normative sections below semantic validity", () => {
+  expect(
+    composeFixture({
+      path: "plans/duplicate-objective.task.md",
+      discoveryMatches: ["**/*.task.md"],
+      markdown: `---
+doc_spec: agent-markdown/0.1
+doc_kind: task
+doc_profile: task/basic@v1
+title: Reject ambiguous normative sections
+status: ready
+---
+## Objective
+
+Keep the first objective around to make the ambiguity obvious.
+
+## Objective
+
+The second objective should make the document structurally parseable but
+semantically ambiguous.
+
+## Context / Constraints
+
+Only semantic validation should fail in this fixture.
+
+## Materially verifiable success criteria
+
+- [ ] The duplicate top-level objective blocks semantic trust.
+
+## Execution notes
+
+Leave structural requirements intact so the semantic seam is isolated.
+`,
+    }).validation,
+  ).toEqual({
+    conformance: "structurally_valid",
+    errors: [
+      {
+        code: "normative-section-ambiguous",
+        severity: "error",
+        message:
+          'Normative section "Objective" must appear at most once at the top level for profile "task/basic@v1".',
+        path: 'body.sections["Objective"]',
+      },
+    ],
+    warnings: [
+      {
+        code: "degraded-affordance",
+        severity: "warning",
+        message:
+          'Affordances remain degraded until semantic validation passes for profile "task/basic@v1".',
+        path: "affordances.actionability",
+      },
+    ],
   });
 });
 

@@ -1,7 +1,10 @@
 import type { ProfileResolutionResult } from "../core-model/profile-resolution.ts";
 import type { NormalizedSection } from "../core-model/sections.ts";
 import type { NormalizedValidation } from "../core-model/validation.ts";
-import { validateStructuralProfileContract } from "../validation/index.ts";
+import {
+  validateSemanticProfileContract,
+  validateStructuralProfileContract,
+} from "../validation/index.ts";
 
 export interface CreateNormalizedValidationOptions {
   profileResolution: ProfileResolutionResult;
@@ -28,9 +31,25 @@ export function createNormalizedValidation(
     bodySections,
   });
 
+  if (errors.length > 0) {
+    return {
+      conformance: "recognized",
+      errors,
+      warnings: [],
+    };
+  }
+
+  const semanticValidation = validateSemanticProfileContract({
+    profile: profileResolution.profile,
+    bodySections,
+  });
+
   return {
-    conformance: errors.length === 0 ? "structurally_valid" : "recognized",
-    errors,
-    warnings: [],
+    conformance:
+      semanticValidation.errors.length === 0
+        ? "semantically_valid"
+        : "structurally_valid",
+    errors: semanticValidation.errors,
+    warnings: semanticValidation.warnings,
   };
 }
