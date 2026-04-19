@@ -7,8 +7,8 @@ import {
   parseMarkdownSections,
   readDocumentDeclaration,
   resolveProfileReference,
-  type LoadedProfileRegistry,
   type NormalizedDocument,
+  type LoadedProfileRegistry,
 } from "../index.ts";
 
 const repoRoot = resolvePath(import.meta.dir, "..");
@@ -27,20 +27,7 @@ interface ComposeFixtureOptions {
 }
 
 function composeFixture(options: ComposeFixtureOptions): NormalizedDocument {
-  const { contentHash } = options;
-  const { discoveredDocument, profileResolution, parsedBody } =
-    createResolvedFixture(options);
-
-  return composeNormalizedDocument({
-    discoveredDocument,
-    profileResolution,
-    parsedBody,
-    contentHash,
-  });
-}
-
-function createResolvedFixture(options: ComposeFixtureOptions) {
-  const { path, discoveryMatches, markdown } = options;
+  const { path, discoveryMatches, markdown, contentHash } = options;
   const discoveredDocument = readDocumentDeclaration({
     candidate: {
       path,
@@ -56,11 +43,12 @@ function createResolvedFixture(options: ComposeFixtureOptions) {
   });
   const parsedBody = parseMarkdownSections(discoveredDocument.source.rawBodyMarkdown);
 
-  return {
+  return composeNormalizedDocument({
     discoveredDocument,
     profileResolution,
     parsedBody,
-  };
+    contentHash,
+  });
 }
 
 test("composes a normalized envelope from resolved declaration, profile, metadata, and body seams", () => {
@@ -281,6 +269,44 @@ Keep every required heading present so emptiness is the only failure.
   });
 });
 
+test("treats required sections with only nested subsection content as nonempty", () => {
+  expect(
+    composeFixture({
+      path: "plans/nested-execution-content.task.md",
+      discoveryMatches: ["**/*.task.md"],
+      markdown: `---
+doc_spec: agent-markdown/0.1
+doc_kind: task
+doc_profile: task/basic@v1
+title: Count nested subsection content
+status: ready
+---
+## Objective
+
+Keep structural emptiness checks aligned with section subtrees.
+
+## Context / Constraints
+
+Only nested subsection content should satisfy the execution-notes content rule.
+
+## Materially verifiable success criteria
+
+- [ ] Nested subsection content counts as nonempty for required sections.
+
+## Execution notes
+
+### Implementation detail
+
+This nested subsection carries the only execution-notes content.
+`,
+    }).validation,
+  ).toEqual({
+    conformance: "semantically_valid",
+    errors: [],
+    warnings: [],
+  });
+});
+
 test("requires canonical sections to exist at the top level", () => {
   const normalized = composeFixture({
     path: "plans/nested-execution-notes.task.md",
@@ -349,6 +375,44 @@ Keep every other required section valid so the placement bug is isolated.
   });
 });
 
+test("accepts checklist items inside nested success-criteria subsections", () => {
+  expect(
+    composeFixture({
+      path: "plans/nested-success-criteria-checklist.task.md",
+      discoveryMatches: ["**/*.task.md"],
+      markdown: `---
+doc_spec: agent-markdown/0.1
+doc_kind: task
+doc_profile: task/basic@v1
+title: Count nested success-criteria checklists
+status: ready
+---
+## Objective
+
+Keep checklist validation aligned with section subtrees.
+
+## Context / Constraints
+
+The only checklist items in this section live under a nested subsection.
+
+## Materially verifiable success criteria
+
+### Verification checklist
+
+- [ ] Nested checklist items satisfy the structural checklist rule.
+
+## Execution notes
+
+Do not require checklist markers to appear directly under the top-level heading.
+`,
+    }).validation,
+  ).toEqual({
+    conformance: "semantically_valid",
+    errors: [],
+    warnings: [],
+  });
+});
+
 test("accepts markdown checklist markers beyond top-level dash bullets", () => {
   expect(
     composeFixture({
@@ -384,6 +448,360 @@ Limit the implementation to structural checklist detection.
   ).toEqual({
     conformance: "semantically_valid",
     errors: [],
+    warnings: [],
+  });
+});
+
+test("accepts checklist items nested under non-checklist list items", () => {
+  expect(
+    composeFixture({
+      path: "plans/nested-list-checklists.task.md",
+      discoveryMatches: ["**/*.task.md"],
+      markdown: `---
+doc_spec: agent-markdown/0.1
+doc_kind: task
+doc_profile: task/basic@v1
+title: Accept nested checklist list items
+status: ready
+---
+## Objective
+
+Keep checklist detection aligned with nested Markdown lists.
+
+## Context / Constraints
+
+The only checklist items in this section are nested underneath a parent list item.
+
+## Materially verifiable success criteria
+
+- Parent item
+    1. [ ] Nested ordered checklist items remain valid.
+
+## Execution notes
+
+Limit the fix to structural checklist detection.
+`,
+    }).validation,
+  ).toEqual({
+    conformance: "semantically_valid",
+    errors: [],
+    warnings: [],
+  });
+});
+
+test("keeps list context across continuation paragraphs", () => {
+  expect(
+    composeFixture({
+      path: "plans/list-continuation-checklists.task.md",
+      discoveryMatches: ["**/*.task.md"],
+      markdown: `---
+doc_spec: agent-markdown/0.1
+doc_kind: task
+doc_profile: task/basic@v1
+title: Preserve continuation paragraph list context
+status: ready
+---
+## Objective
+
+Keep checklist detection aligned with list continuation paragraphs.
+
+## Context / Constraints
+
+The only valid checklist item in this section appears after a continuation paragraph under an ordered list item.
+
+## Materially verifiable success criteria
+
+10. Parent item
+    Intro paragraph
+    - [ ] Child task remains a valid nested checklist item.
+
+## Execution notes
+
+Limit the fix to list-context retention across continuation lines.
+`,
+    }).validation,
+  ).toEqual({
+    conformance: "semantically_valid",
+    errors: [],
+    warnings: [],
+  });
+});
+
+test("keeps list context across lazy continuation paragraphs", () => {
+  expect(
+    composeFixture({
+      path: "plans/lazy-list-continuation-checklists.task.md",
+      discoveryMatches: ["**/*.task.md"],
+      markdown: `---
+doc_spec: agent-markdown/0.1
+doc_kind: task
+doc_profile: task/basic@v1
+title: Preserve lazy continuation list context
+status: ready
+---
+## Objective
+
+Keep checklist detection aligned with lazy list continuation paragraphs.
+
+## Context / Constraints
+
+The only valid checklist item in this section appears after an unindented continuation paragraph under an ordered list item.
+
+## Materially verifiable success criteria
+
+10. Parent item
+Continuation text
+    - [ ] Child task remains a valid nested checklist item.
+
+## Execution notes
+
+Limit the fix to lazy continuation handling in checklist detection.
+`,
+    }).validation,
+  ).toEqual({
+    conformance: "semantically_valid",
+    errors: [],
+    warnings: [],
+  });
+});
+
+test("does not keep list context across thematic breaks", () => {
+  expect(
+    composeFixture({
+      path: "plans/list-thematic-break-checklists.task.md",
+      discoveryMatches: ["**/*.task.md"],
+      markdown: `---
+doc_spec: agent-markdown/0.1
+doc_kind: task
+doc_profile: task/basic@v1
+title: Stop list context at thematic breaks
+status: ready
+---
+## Objective
+
+Keep lazy continuation handling limited to paragraph lines.
+
+## Context / Constraints
+
+Thematic breaks should terminate list context before later indented checklist-looking lines.
+
+## Materially verifiable success criteria
+
+10. Parent item
+---
+    - [ ] This line should not count after the thematic break.
+
+## Execution notes
+
+Limit the fix to lazy continuation block-starter handling.
+`,
+    }).validation,
+  ).toEqual({
+    conformance: "recognized",
+    errors: [
+      {
+        code: "checklist-required",
+        severity: "error",
+        message:
+          'Section "Materially verifiable success criteria" must contain checklist items for profile "task/basic@v1".',
+        path: 'body.sections["Materially verifiable success criteria"]',
+      },
+    ],
+    warnings: [],
+  });
+});
+
+test("does not keep list context across top-level fenced code blocks", () => {
+  expect(
+    composeFixture({
+      path: "plans/list-top-level-fence-checklists.task.md",
+      discoveryMatches: ["**/*.task.md"],
+      markdown: `---
+doc_spec: agent-markdown/0.1
+doc_kind: task
+doc_profile: task/basic@v1
+title: Stop list context at top-level fences
+status: ready
+---
+## Objective
+
+Keep top-level fenced blocks from preserving stale list context.
+
+## Context / Constraints
+
+The fenced block starts at column 0, so it should terminate the preceding ordered-list context before later indented checklist-looking lines.
+
+## Materially verifiable success criteria
+
+10. Parent item
+\`\`\`md
+code sample
+\`\`\`
+    - [ ] This line should not count after the top-level fence.
+
+## Execution notes
+
+Limit the fix to top-level fenced-block handling in checklist detection.
+`,
+    }).validation,
+  ).toEqual({
+    conformance: "recognized",
+    errors: [
+      {
+        code: "checklist-required",
+        severity: "error",
+        message:
+          'Section "Materially verifiable success criteria" must contain checklist items for profile "task/basic@v1".',
+        path: 'body.sections["Materially verifiable success criteria"]',
+      },
+    ],
+    warnings: [],
+  });
+});
+
+test("does not keep list context after fenced code blocks close", () => {
+  expect(
+    composeFixture({
+      path: "plans/list-post-fence-prose-checklists.task.md",
+      discoveryMatches: ["**/*.task.md"],
+      markdown: `---
+doc_spec: agent-markdown/0.1
+doc_kind: task
+doc_profile: task/basic@v1
+title: Stop list context after fenced blocks close
+status: ready
+---
+## Objective
+
+Keep closed fenced blocks from preserving stale list context.
+
+## Context / Constraints
+
+Once a top-level fenced block closes, later prose should not revive the earlier ordered-list context before an indented checklist-looking line.
+
+## Materially verifiable success criteria
+
+10. Parent item
+\`\`\`md
+code sample
+\`\`\`
+Follow-up prose after the fence is not a lazy continuation.
+    - [ ] This line should not count after the closed fence.
+
+## Execution notes
+
+Limit the fix to post-fence list-context handling in checklist detection.
+`,
+    }).validation,
+  ).toEqual({
+    conformance: "recognized",
+    errors: [
+      {
+        code: "checklist-required",
+        severity: "error",
+        message:
+          'Section "Materially verifiable success criteria" must contain checklist items for profile "task/basic@v1".',
+        path: 'body.sections["Materially verifiable success criteria"]',
+      },
+    ],
+    warnings: [],
+  });
+});
+
+test("ignores checklist-like code blocks nested inside list items", () => {
+  expect(
+    composeFixture({
+      path: "plans/nested-list-code-checklist.task.md",
+      discoveryMatches: ["**/*.task.md"],
+      markdown: `---
+doc_spec: agent-markdown/0.1
+doc_kind: task
+doc_profile: task/basic@v1
+title: Ignore checklist-like code in nested lists
+status: ready
+---
+## Objective
+
+Keep indented code blocks inside lists from satisfying checklist validation.
+
+## Context / Constraints
+
+The only checklist-looking text in this section appears inside an indented code block nested under a list item.
+
+## Materially verifiable success criteria
+
+- Parent item
+
+      - [ ] This is only code inside the list item.
+
+- The prose afterward is not a real checklist item.
+
+## Execution notes
+
+Limit the fix to checklist detection inside nested list structures.
+`,
+    }).validation,
+  ).toEqual({
+    conformance: "recognized",
+    errors: [
+      {
+        code: "checklist-required",
+        severity: "error",
+        message:
+          'Section "Materially verifiable success criteria" must contain checklist items for profile "task/basic@v1".',
+        path: 'body.sections["Materially verifiable success criteria"]',
+      },
+    ],
+    warnings: [],
+  });
+});
+
+test("ignores checklist-like text inside fenced code blocks nested inside list items", () => {
+  expect(
+    composeFixture({
+      path: "plans/nested-list-fenced-checklist.task.md",
+      discoveryMatches: ["**/*.task.md"],
+      markdown: `---
+doc_spec: agent-markdown/0.1
+doc_kind: task
+doc_profile: task/basic@v1
+title: Ignore fenced checklist code in nested lists
+status: ready
+---
+## Objective
+
+Keep fenced code blocks inside list items from satisfying checklist validation.
+
+## Context / Constraints
+
+The only checklist-looking text in this section appears inside a fenced code block nested under a list item.
+
+## Materially verifiable success criteria
+
+- Parent item
+
+    \`\`\`md
+    - [ ] This is only a fenced code sample inside the list item.
+    \`\`\`
+
+- The prose afterward is not a real checklist item.
+
+## Execution notes
+
+Limit the fix to nested fenced-code handling in checklist detection.
+`,
+    }).validation,
+  ).toEqual({
+    conformance: "recognized",
+    errors: [
+      {
+        code: "checklist-required",
+        severity: "error",
+        message:
+          'Section "Materially verifiable success criteria" must contain checklist items for profile "task/basic@v1".',
+        path: 'body.sections["Materially verifiable success criteria"]',
+      },
+    ],
     warnings: [],
   });
 });
@@ -489,6 +907,60 @@ Use indented code as the only source of checklist syntax in this section.
       },
     ],
     warnings: [],
+  });
+});
+
+test("treats duplicate top-level headings deterministically", () => {
+  expect(
+    composeFixture({
+      path: "plans/duplicate-execution-notes.task.md",
+      discoveryMatches: ["**/*.task.md"],
+      markdown: `---
+doc_spec: agent-markdown/0.1
+doc_kind: task
+doc_profile: task/basic@v1
+title: Ignore duplicate heading order
+status: ready
+---
+## Objective
+
+Keep duplicate required headings from changing conformance by order alone.
+
+## Context / Constraints
+
+One duplicate execution-notes heading is nonempty and the later duplicate is empty.
+
+## Materially verifiable success criteria
+
+- [ ] Structural validation aggregates duplicate top-level headings deterministically.
+
+## Execution notes
+
+This first duplicate contains the required content.
+
+## Execution notes
+`,
+    }).validation,
+  ).toEqual({
+    conformance: "structurally_valid",
+    errors: [
+      {
+        code: "normative-section-ambiguous",
+        severity: "error",
+        message:
+          'Normative section "Execution notes" must appear at most once at the top level for profile "task/basic@v1".',
+        path: 'body.sections["Execution notes"]',
+      },
+    ],
+    warnings: [
+      {
+        code: "degraded-affordance",
+        severity: "warning",
+        message:
+          'Affordances remain degraded until semantic validation passes for profile "task/basic@v1".',
+        path: "affordances.actionability",
+      },
+    ],
   });
 });
 
