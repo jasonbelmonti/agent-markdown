@@ -1,20 +1,16 @@
 import { beforeAll, expect, test } from "bun:test";
-import { resolve as resolvePath } from "node:path";
 
+import { type LoadedProfileRegistry } from "../index.ts";
 import {
-  collectDiscoveryHints,
-  composeNormalizedDocument,
-  discoverDocumentCandidate,
-  loadProfileRegistry,
-  parseMarkdownSections,
-  readDocumentDeclaration,
-  resolveProfileReference,
-  type LoadedProfileRegistry,
-} from "../index.ts";
+  checklistPattern,
+  collectExampleDiscoveryHints,
+  createSectionContentMap,
+  loadExampleFixtureRegistry,
+  loadResolvedExampleFixture,
+  successCriteriaHeading,
+} from "./support/example-document-fixtures.ts";
 
-const repoRoot = resolvePath(import.meta.dir, "..");
 const agentMarkdownSpec = "agent-markdown/0.1" as const;
-const successCriteriaHeading = "Materially verifiable success criteria" as const;
 
 const validFixtures = [
   {
@@ -37,52 +33,17 @@ const validFixtures = [
   },
 ] as const;
 type ValidFixture = (typeof validFixtures)[number];
-type LoadedValidFixture = Awaited<ReturnType<typeof loadValidFixture>>;
+type LoadedValidFixture = Awaited<ReturnType<typeof loadResolvedExampleFixture>>;
 
 let registry: LoadedProfileRegistry;
 
 beforeAll(async () => {
-  registry = await loadProfileRegistry({ repoRoot });
+  registry = await loadExampleFixtureRegistry();
 });
-
-async function loadValidFixture(
-  fixture: ValidFixture,
-  discoveryHints: ReturnType<typeof collectDiscoveryHints>,
-) {
-  const absolutePath = resolvePath(repoRoot, fixture.path);
-  const candidate = discoverDocumentCandidate({
-    path: absolutePath,
-    repoRoot,
-    discoveryHints,
-  });
-
-  expect(candidate).not.toBeNull();
-
-  if (candidate === null) {
-    throw new Error(`Expected fixture "${fixture.path}" to match discovery hints.`);
-  }
-
-  const markdown = await Bun.file(absolutePath).text();
-  const document = readDocumentDeclaration({
-    candidate,
-    markdown,
-  });
-
-  return {
-    candidate,
-    document,
-    resolution: resolveProfileReference(registry, {
-      doc_spec: document.declaration.docSpec,
-      doc_kind: document.declaration.docKind,
-      doc_profile: document.declaration.docProfile,
-    }),
-    sections: parseMarkdownSections(document.source.rawBodyMarkdown),
-  };
-}
 
 function assertValidFixture(
   fixture: ValidFixture,
-  { candidate, document, resolution, sections }: LoadedValidFixture,
+  { candidate, document, resolution, sections, normalized }: LoadedValidFixture,
 ) {
   expect(document.source.path).toBe(fixture.path);
   expect(document.declaration).toEqual({
@@ -115,11 +76,6 @@ function assertValidFixture(
   expect(sections.sections.map((section) => section.heading)).toEqual(
     requiredSections,
   );
-  const normalized = composeNormalizedDocument({
-    discoveredDocument: document,
-    profileResolution: resolution,
-    parsedBody: sections,
-  });
 
   expect(normalized.validation).toEqual({
     conformance: "semantically_valid",
@@ -131,9 +87,7 @@ function assertValidFixture(
     actionability: resolution.profile.affordances.actionability,
     normativeSections: [...resolution.profile.affordances.normative_sections],
   });
-  const sectionContentByHeading = new Map(
-    sections.sections.map((section) => [section.heading, section.contentMarkdown]),
-  );
+  const sectionContentByHeading = createSectionContentMap(sections);
 
   for (const heading of requiredNonemptySections) {
     expect(sectionContentByHeading.get(heading)?.length ?? 0).toBeGreaterThan(0);
@@ -152,14 +106,17 @@ function assertValidFixture(
     );
   }
 
-  expect(successCriteriaSection).toMatch(/(^|\n)- \[ \] /);
+  expect(successCriteriaSection).toMatch(checklistPattern);
 }
 
 test("ships valid example documents for all three MVP profiles", async () => {
-  const discoveryHints = collectDiscoveryHints(registry);
+  const discoveryHints = collectExampleDiscoveryHints(registry);
 
   for (const fixture of validFixtures) {
-    const loadedFixture = await loadValidFixture(fixture, discoveryHints);
+    const loadedFixture = await loadResolvedExampleFixture(fixture.path, {
+      discoveryHints,
+      registry,
+    });
 
     assertValidFixture(fixture, loadedFixture);
   }

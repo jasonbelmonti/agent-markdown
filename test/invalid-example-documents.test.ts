@@ -1,97 +1,37 @@
 import { beforeAll, expect, test } from "bun:test";
-import { resolve as resolvePath } from "node:path";
 
 import {
-  collectDiscoveryHints,
-  composeNormalizedDocument,
-  discoverDocumentCandidate,
-  loadProfileRegistry,
-  parseMarkdownSections,
   readDocumentDeclaration,
-  resolveProfileReference,
-  type DocumentDiscoveryHint,
   type LoadedProfileRegistry,
   type NormalizedValidation,
 } from "../index.ts";
-
-const repoRoot = resolvePath(import.meta.dir, "..");
-const checklistPattern = /(^|\n)- \[ \] /u;
-const successCriteriaHeading = "Materially verifiable success criteria" as const;
+import {
+  checklistPattern,
+  collectExampleDiscoveryHints,
+  createSectionContentMap,
+  discoverExampleFixture,
+  loadExampleFixtureMarkdown,
+  loadExampleFixtureRegistry,
+  loadResolvedExampleFixture,
+  successCriteriaHeading,
+} from "./support/example-document-fixtures.ts";
 
 let registry: LoadedProfileRegistry;
-let discoveryHints: DocumentDiscoveryHint[];
+let discoveryHints: ReturnType<typeof collectExampleDiscoveryHints>;
 
 beforeAll(async () => {
-  registry = await loadProfileRegistry({ repoRoot });
-  discoveryHints = collectDiscoveryHints(registry);
+  registry = await loadExampleFixtureRegistry();
+  discoveryHints = collectExampleDiscoveryHints(registry);
 });
 
-async function loadFixtureMarkdown(path: string): Promise<string> {
-  return Bun.file(resolvePath(repoRoot, path)).text();
-}
-
-function discoverFixture(path: string) {
-  const candidate = discoverDocumentCandidate({
-    path: resolvePath(repoRoot, path),
-    repoRoot,
-    discoveryHints,
-  });
-
-  expect(candidate).not.toBeNull();
-
-  if (candidate === null) {
-    throw new Error(`Expected fixture "${path}" to match discovery hints.`);
-  }
-
-  expect(candidate.path).toBe(path);
-
-  return candidate;
-}
-
 function assertCandidateMatchesProfile(
-  candidate: ReturnType<typeof discoverFixture>,
+  candidate: ReturnType<typeof discoverExampleFixture>,
   profileId: string,
 ) {
   expect(candidate.discoveryMatches.length).toBeGreaterThan(0);
   expect(
     candidate.matchedHints.some((hint) => hint.origin.profileId === profileId),
   ).toBeTrue();
-}
-
-async function loadResolvedFixture(path: string) {
-  const candidate = discoverFixture(path);
-  const markdown = await loadFixtureMarkdown(path);
-  const document = readDocumentDeclaration({
-    candidate,
-    markdown,
-  });
-  const resolution = resolveProfileReference(registry, {
-    doc_spec: document.declaration.docSpec,
-    doc_kind: document.declaration.docKind,
-    doc_profile: document.declaration.docProfile,
-  });
-  const sections = parseMarkdownSections(document.source.rawBodyMarkdown);
-  const normalized = composeNormalizedDocument({
-    discoveredDocument: document,
-    profileResolution: resolution,
-    parsedBody: sections,
-  });
-
-  return {
-    candidate,
-    document,
-    resolution,
-    sections,
-    normalized,
-  };
-}
-
-function createSectionContentMap(
-  parsedBody: ReturnType<typeof parseMarkdownSections>,
-) {
-  return new Map(
-    parsedBody.sections.map((section) => [section.heading, section.contentMarkdown]),
-  );
 }
 
 function assertNonemptySections(
@@ -127,7 +67,10 @@ test("ships a discovered but undeclared task fixture", async () => {
   const fixturePath = "examples/invalid/declaration/undeclared.task.md";
   const taskProfile = registry.profilesById["task/basic@v1"];
   const { candidate, document, resolution, sections, normalized } =
-    await loadResolvedFixture(fixturePath);
+    await loadResolvedExampleFixture(fixturePath, {
+      discoveryHints,
+      registry,
+    });
   const sectionContentByHeading = createSectionContentMap(sections);
 
   assertCandidateMatchesProfile(candidate, "task/basic@v1");
@@ -159,8 +102,8 @@ test("ships a discovered but undeclared task fixture", async () => {
 test("ships a malformed-frontmatter fixture that fails before declaration decoding", async () => {
   const fixturePath =
     "examples/invalid/declaration/malformed-frontmatter.task.md";
-  const candidate = discoverFixture(fixturePath);
-  const markdown = await loadFixtureMarkdown(fixturePath);
+  const candidate = discoverExampleFixture(fixturePath, discoveryHints);
+  const markdown = await loadExampleFixtureMarkdown(fixturePath);
 
   expect(() =>
     readDocumentDeclaration({
@@ -176,7 +119,10 @@ test("ships an unknown-profile fixture with an otherwise valid task shape", asyn
   const fixturePath = "examples/invalid/profile/unknown-profile.task.md";
   const taskProfile = registry.profilesById["task/basic@v1"];
   const { candidate, document, resolution, sections, normalized } =
-    await loadResolvedFixture(fixturePath);
+    await loadResolvedExampleFixture(fixturePath, {
+      discoveryHints,
+      registry,
+    });
   const sectionContentByHeading = createSectionContentMap(sections);
 
   assertCandidateMatchesProfile(candidate, "task/basic@v1");
@@ -212,7 +158,10 @@ test("ships a project fixture that is missing exactly one required section", asy
     "examples/invalid/body/missing-success-measures.project.md";
   const projectProfile = registry.profilesById["project/basic@v1"];
   const { candidate, document, resolution, sections, normalized } =
-    await loadResolvedFixture(fixturePath);
+    await loadResolvedExampleFixture(fixturePath, {
+      discoveryHints,
+      registry,
+    });
   const sectionHeadings = sections.sections.map((section) => section.heading);
   const sectionContentByHeading = createSectionContentMap(sections);
   const missingRequiredSections = projectProfile.body.required_sections.filter(
@@ -257,7 +206,10 @@ test("ships a task fixture that violates the checklist contract without missing 
     "examples/invalid/contract/success-criteria-not-checklist.task.md";
   const taskProfile = registry.profilesById["task/basic@v1"];
   const { candidate, document, resolution, sections, normalized } =
-    await loadResolvedFixture(fixturePath);
+    await loadResolvedExampleFixture(fixturePath, {
+      discoveryHints,
+      registry,
+    });
   const sectionContentByHeading = createSectionContentMap(sections);
   const successCriteriaSection = sectionContentByHeading.get(successCriteriaHeading);
 
@@ -299,4 +251,74 @@ test("ships a task fixture that violates the checklist contract without missing 
 
   expect(successCriteriaSection.length).toBeGreaterThan(0);
   expect(successCriteriaSection).not.toMatch(checklistPattern);
+});
+
+test("ships a task fixture that remains structurally valid while semantic validation degrades affordances", async () => {
+  const fixturePath = "examples/invalid/semantic/duplicate-objective.task.md";
+  const taskProfile = registry.profilesById["task/basic@v1"];
+  const { candidate, document, resolution, sections, normalized } =
+    await loadResolvedExampleFixture(fixturePath, {
+      discoveryHints,
+      registry,
+    });
+  const sectionContentByHeading = createSectionContentMap(sections);
+  const topLevelObjectiveSections = sections.sections.filter(
+    (section) =>
+      section.heading === "Objective" && section.headingPath.length === 1,
+  );
+
+  assertCandidateMatchesProfile(candidate, "task/basic@v1");
+  expect(document.declaration.docSpec).toBe("agent-markdown/0.1");
+  expect(document.declaration.docKind).toBe("task");
+  expect(document.declaration.docProfile).toBe("task/basic@v1");
+  expect(resolution.resolved).toBe(true);
+  expect(resolution.reason).toBeNull();
+  expect(resolution.profile_id).toBe("task/basic@v1");
+  assertValidation(normalized.validation, {
+    conformance: "structurally_valid",
+    errors: [
+      createValidationError(
+        "normative-section-ambiguous",
+        'Normative section "Objective" must appear at most once at the top level for profile "task/basic@v1".',
+        'body.sections["Objective"]',
+      ),
+    ],
+    warnings: [
+      {
+        code: "degraded-affordance",
+        severity: "warning",
+        message:
+          'Affordances remain degraded until semantic validation passes for profile "task/basic@v1".',
+        path: "affordances.actionability",
+      },
+    ],
+  });
+  expect(normalized.affordances).toEqual({
+    role: null,
+    actionability: null,
+    normativeSections: [...taskProfile.affordances.normative_sections],
+  });
+  expect(sections.sections.map((section) => section.heading)).toEqual([
+    "Objective",
+    "Objective",
+    "Context / Constraints",
+    "Materially verifiable success criteria",
+    "Execution notes",
+  ]);
+  expect(topLevelObjectiveSections).toHaveLength(2);
+  expect(
+    topLevelObjectiveSections.map((section) => section.contentMarkdown),
+  ).toEqual([
+    "Keep the first objective around to make the ambiguity obvious.",
+    "The second objective should make the document structurally parseable but\nsemantically ambiguous.",
+  ]);
+  assertNonemptySections(
+    sectionContentByHeading,
+    taskProfile.validation.require_nonempty_sections.filter(
+      (heading) => heading !== "Objective",
+    ),
+  );
+  expect(sectionContentByHeading.get(successCriteriaHeading)).toMatch(
+    checklistPattern,
+  );
 });
