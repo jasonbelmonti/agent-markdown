@@ -694,6 +694,53 @@ Limit the fix to html-block handling in checklist detection.
   });
 });
 
+test("does not keep list context after indented code lines", () => {
+  expect(
+    composeFixture({
+      path: "plans/list-indented-code-break-checklists.task.md",
+      discoveryMatches: ["**/*.task.md"],
+      markdown: `---
+doc_spec: agent-markdown/0.1
+doc_kind: task
+doc_profile: task/basic@v1
+title: Stop list context after indented code lines
+status: ready
+---
+## Objective
+
+Keep lazy continuation handling from crossing indented code blocks.
+
+## Context / Constraints
+
+After an indented code line inside a list item, later outdented prose should not revive the earlier list context before an indented checklist-looking line.
+
+## Materially verifiable success criteria
+
+10. Parent item
+        code sample
+Outside paragraph
+    - [ ] This line should not count after the indented code.
+
+## Execution notes
+
+Limit the fix to indented-code handling in checklist detection.
+`,
+    }).validation,
+  ).toEqual({
+    conformance: "recognized",
+    errors: [
+      {
+        code: "checklist-required",
+        severity: "error",
+        message:
+          'Section "Materially verifiable success criteria" must contain checklist items for profile "task/basic@v1".',
+        path: 'body.sections["Materially verifiable success criteria"]',
+      },
+    ],
+    warnings: [],
+  });
+});
+
 test("does not keep list context across top-level fenced code blocks", () => {
   expect(
     composeFixture({

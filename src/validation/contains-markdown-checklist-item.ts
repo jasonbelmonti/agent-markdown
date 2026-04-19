@@ -67,7 +67,8 @@ export function containsMarkdownChecklistItem(markdown: string): boolean {
 
       previousLineWasBlank = lineIsBlank;
       previousLineCanContinueParagraph =
-        !lineIsBlank && isParagraphContinuationCandidate(line.content);
+        !lineIsBlank &&
+        isParagraphContinuationCandidate(line.content, activeListIndentations);
       continue;
     }
 
@@ -226,7 +227,7 @@ function isLazyContinuationLine(
 
   return (
     readLineIndentation(line) < activeListIndentations.at(-1)! &&
-    isParagraphContinuationCandidate(line)
+    isParagraphContinuationCandidate(line, activeListIndentations)
   );
 }
 
@@ -277,8 +278,14 @@ function isNestedWithinListContent(
   return indentation >= activeIndentation && indentation < activeIndentation + 4;
 }
 
-function isParagraphContinuationCandidate(line: string): boolean {
-  return !startsBlockOutsideParagraph(line);
+function isParagraphContinuationCandidate(
+  line: string,
+  activeListIndentations: number[],
+): boolean {
+  return (
+    !startsBlockOutsideParagraph(line) &&
+    !isIndentedCodeLine(line, activeListIndentations)
+  );
 }
 
 function startsBlockOutsideParagraph(line: string): boolean {
@@ -288,4 +295,17 @@ function startsBlockOutsideParagraph(line: string): boolean {
     /^ {0,3}(?:-{3,}|_{3,}|\*{3,})(?:[ \t]*[-_*][ \t]*)*$/u.test(line) ||
     htmlBlockStartPattern.test(line)
   );
+}
+
+function isIndentedCodeLine(
+  line: string,
+  activeListIndentations: number[],
+): boolean {
+  const indentation = readLineIndentation(line);
+
+  if (activeListIndentations.length === 0) {
+    return indentation >= 4;
+  }
+
+  return indentation >= activeListIndentations.at(-1)! + 4;
 }
