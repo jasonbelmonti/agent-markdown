@@ -791,6 +791,56 @@ Limit the fix to post-fence list-context handling in checklist detection.
   });
 });
 
+test("does not keep list context after nested fenced code blocks close", () => {
+  expect(
+    composeFixture({
+      path: "plans/nested-list-post-fence-prose-checklists.task.md",
+      discoveryMatches: ["**/*.task.md"],
+      markdown: `---
+doc_spec: agent-markdown/0.1
+doc_kind: task
+doc_profile: task/basic@v1
+title: Stop nested list context after fenced blocks close
+status: ready
+---
+## Objective
+
+Keep closed fenced blocks inside list items from preserving stale list context.
+
+## Context / Constraints
+
+After an indented fenced block closes inside a list item, later outdented prose should not revive the earlier list context before an indented checklist-looking line.
+
+## Materially verifiable success criteria
+
+- Parent item
+
+    \`\`\`md
+    code sample
+    \`\`\`
+Outside paragraph
+    - [ ] This line should not count after the closed nested fence.
+
+## Execution notes
+
+Limit the fix to post-fence nested-list handling in checklist detection.
+`,
+    }).validation,
+  ).toEqual({
+    conformance: "recognized",
+    errors: [
+      {
+        code: "checklist-required",
+        severity: "error",
+        message:
+          'Section "Materially verifiable success criteria" must contain checklist items for profile "task/basic@v1".',
+        path: 'body.sections["Materially verifiable success criteria"]',
+      },
+    ],
+    warnings: [],
+  });
+});
+
 test("ignores checklist-like code blocks nested inside list items", () => {
   expect(
     composeFixture({

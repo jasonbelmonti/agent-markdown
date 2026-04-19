@@ -22,6 +22,7 @@ export function containsMarkdownChecklistItem(markdown: string): boolean {
   let openFence: FenceState | null = null;
   const activeListIndentations: number[] = [];
   let previousLineWasBlank = false;
+  let previousLineCanContinueParagraph = false;
 
   for (const line of splitMarkdownLines(markdown)) {
     const lineIsBlank = isBlankLine(line.content);
@@ -32,6 +33,7 @@ export function containsMarkdownChecklistItem(markdown: string): boolean {
       }
 
       previousLineWasBlank = lineIsBlank;
+      previousLineCanContinueParagraph = false;
       continue;
     }
 
@@ -44,6 +46,7 @@ export function containsMarkdownChecklistItem(markdown: string): boolean {
       );
       openFence = openingFence;
       previousLineWasBlank = false;
+      previousLineCanContinueParagraph = false;
       continue;
     }
 
@@ -56,12 +59,15 @@ export function containsMarkdownChecklistItem(markdown: string): boolean {
           line.content,
           activeListIndentations,
           previousLineWasBlank,
+          previousLineCanContinueParagraph,
         )
       ) {
         collapseNestedListIndentations(activeListIndentations, readLineIndentation(line.content));
       }
 
       previousLineWasBlank = lineIsBlank;
+      previousLineCanContinueParagraph =
+        !lineIsBlank && isParagraphContinuationCandidate(line.content);
       continue;
     }
 
@@ -89,6 +95,7 @@ export function containsMarkdownChecklistItem(markdown: string): boolean {
     }
 
     previousLineWasBlank = false;
+    previousLineCanContinueParagraph = true;
   }
 
   return false;
@@ -207,8 +214,13 @@ function isLazyContinuationLine(
   line: string,
   activeListIndentations: number[],
   previousLineWasBlank: boolean,
+  previousLineCanContinueParagraph: boolean,
 ): boolean {
-  if (previousLineWasBlank || activeListIndentations.length === 0) {
+  if (
+    previousLineWasBlank ||
+    !previousLineCanContinueParagraph ||
+    activeListIndentations.length === 0
+  ) {
     return false;
   }
 
