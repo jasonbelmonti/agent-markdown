@@ -694,6 +694,54 @@ Limit the fix to html-block handling in checklist detection.
   });
 });
 
+test("does not keep list context across type-1 html block starts", () => {
+  for (const tag of ["script", "style", "pre", "textarea"]) {
+    expect(
+      composeFixture({
+        path: `plans/list-${tag}-block-checklists.task.md`,
+        discoveryMatches: ["**/*.task.md"],
+        markdown: `---
+doc_spec: agent-markdown/0.1
+doc_kind: task
+doc_profile: task/basic@v1
+title: Stop list context at ${tag} block starts
+status: ready
+---
+## Objective
+
+Keep lazy continuation handling from crossing type-1 HTML block starts.
+
+## Context / Constraints
+
+An HTML block start like <${tag}> should terminate lazy continuation before a later indented checklist-looking line.
+
+## Materially verifiable success criteria
+
+10. Parent item
+<${tag}>
+    - [ ] This line should not count after the html block starts.
+
+## Execution notes
+
+Limit the fix to type-1 html-block handling in checklist detection.
+`,
+      }).validation,
+    ).toEqual({
+      conformance: "recognized",
+      errors: [
+        {
+          code: "checklist-required",
+          severity: "error",
+          message:
+            'Section "Materially verifiable success criteria" must contain checklist items for profile "task/basic@v1".',
+          path: 'body.sections["Materially verifiable success criteria"]',
+        },
+      ],
+      warnings: [],
+    });
+  }
+});
+
 test("does not keep list context after indented code lines", () => {
   expect(
     composeFixture({

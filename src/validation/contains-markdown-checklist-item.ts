@@ -16,7 +16,7 @@ interface ListItemMatch {
 const listItemPattern =
   /^([ \t]*)([*+-]|\d+[.)])([ \t]+)(\[(?: |x|X)\](?:[ \t]+|$))?/u;
 const htmlBlockStartPattern =
-  /^ {0,3}<(?:\/?(?:address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|figcaption|figure|footer|form|frame|frameset|h[1-6]|head|header|hr|html|iframe|legend|li|link|main|menu|menuitem|nav|noframes|ol|optgroup|option|p|param|search|section|summary|table|tbody|td|tfoot|th|thead|title|tr|track|ul)\b|!--|!\[CDATA\[|\?)/u;
+  /^ {0,3}<(?:\/?(?:script|style|pre|textarea)\b|\/?(?:address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|figcaption|figure|footer|form|frame|frameset|h[1-6]|head|header|hr|html|iframe|legend|li|link|main|menu|menuitem|nav|noframes|ol|optgroup|option|p|param|search|section|summary|table|tbody|td|tfoot|th|thead|title|tr|track|ul)\b|!--|!\[CDATA\[|\?)/u;
 
 export function containsMarkdownChecklistItem(markdown: string): boolean {
   let openFence: FenceState | null = null;
