@@ -4,6 +4,7 @@
   "type": "module",
   "private": true,
   "scripts": {
+    "acceptance:cli": "bun test ./test/cli-acceptance.test.ts",
     "normalize": "bun run ./src/cli/normalize.ts",
     "validate": "bun run ./src/cli/validate.ts"
   },
