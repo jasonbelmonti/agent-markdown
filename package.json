@@ -3,6 +3,9 @@
   "module": "index.ts",
   "type": "module",
   "private": true,
+  "scripts": {
+    "normalize": "bun run ./src/cli/normalize.ts"
+  },
   "devDependencies": {
     "@types/bun": "latest"
   },

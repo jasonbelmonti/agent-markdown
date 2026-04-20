@@ -1,0 +1,102 @@
+{
+  "source": {
+    "path": "examples/valid/task/basic.task.md",
+    "contentHash": "sha256:f596a2e32fcaa3ff4da394915d38701e78111386bd20bf464ee17ced7415fbc6",
+    "discoveryMatches": [
+      "**/*.task.md"
+    ],
+    "rawFrontmatter": {
+      "doc_spec": "agent-markdown/0.1",
+      "doc_kind": "task",
+      "doc_profile": "task/basic@v1",
+      "title": "Publish the MVP task example",
+      "status": "ready",
+      "owners": [
+        "agent-markdown maintainers"
+      ]
+    },
+    "rawBodyMarkdown": "## Objective\n\nProvide a concrete `task/basic@v1` document that downstream tooling can load\nwithout guessing declaration fields or section shape.\n\n## Context / Constraints\n\nThis repository is responsible for shipping valid example documents for the MVP.\nThe example should stay intentionally small while still showing the canonical\ndeclaration model and the normative task sections.\n\n## Materially verifiable success criteria\n\n- [ ] The document declares `doc_spec`, `doc_kind`, `doc_profile`, and `title`.\n- [ ] The body includes every required `task/basic@v1` section exactly once.\n- [ ] The success criteria section uses checklist items that are objectively\n  checkable.\n\n## Execution notes\n\nKeep the example readable enough that parser, validation, normalization, and CLI\ntests can all reuse it as a baseline fixture.\n"
+  },
+  "declaration": {
+    "docSpec": "agent-markdown/0.1",
+    "docKind": "task",
+    "docProfile": "task/basic@v1",
+    "title": "Publish the MVP task example"
+  },
+  "profile": {
+    "resolved": true,
+    "profileId": "task/basic@v1",
+    "profilePath": "profiles/task/basic.profile.md"
+  },
+  "metadata": {
+    "title": "Publish the MVP task example",
+    "status": "ready",
+    "owners": [
+      "agent-markdown maintainers"
+    ]
+  },
+  "body": {
+    "sections": [
+      {
+        "id": "objective",
+        "heading": "Objective",
+        "headingPath": [
+          "Objective"
+        ],
+        "level": 2,
+        "order": 0,
+        "rawMarkdown": "## Objective\n\nProvide a concrete `task/basic@v1` document that downstream tooling can load\nwithout guessing declaration fields or section shape.\n\n",
+        "contentMarkdown": "Provide a concrete `task/basic@v1` document that downstream tooling can load\nwithout guessing declaration fields or section shape."
+      },
+      {
+        "id": "context-constraints",
+        "heading": "Context / Constraints",
+        "headingPath": [
+          "Context / Constraints"
+        ],
+        "level": 2,
+        "order": 1,
+        "rawMarkdown": "## Context / Constraints\n\nThis repository is responsible for shipping valid example documents for the MVP.\nThe example should stay intentionally small while still showing the canonical\ndeclaration model and the normative task sections.\n\n",
+        "contentMarkdown": "This repository is responsible for shipping valid example documents for the MVP.\nThe example should stay intentionally small while still showing the canonical\ndeclaration model and the normative task sections."
+      },
+      {
+        "id": "materially-verifiable-success-criteria",
+        "heading": "Materially verifiable success criteria",
+        "headingPath": [
+          "Materially verifiable success criteria"
+        ],
+        "level": 2,
+        "order": 2,
+        "rawMarkdown": "## Materially verifiable success criteria\n\n- [ ] The document declares `doc_spec`, `doc_kind`, `doc_profile`, and `title`.\n- [ ] The body includes every required `task/basic@v1` section exactly once.\n- [ ] The success criteria section uses checklist items that are objectively\n  checkable.\n\n",
+        "contentMarkdown": "- [ ] The document declares `doc_spec`, `doc_kind`, `doc_profile`, and `title`.\n- [ ] The body includes every required `task/basic@v1` section exactly once.\n- [ ] The success criteria section uses checklist items that are objectively\n  checkable."
+      },
+      {
+        "id": "execution-notes",
+        "heading": "Execution notes",
+        "headingPath": [
+          "Execution notes"
+        ],
+        "level": 2,
+        "order": 3,
+        "rawMarkdown": "## Execution notes\n\nKeep the example readable enough that parser, validation, normalization, and CLI\ntests can all reuse it as a baseline fixture.\n",
+        "contentMarkdown": "Keep the example readable enough that parser, validation, normalization, and CLI\ntests can all reuse it as a baseline fixture."
+      }
+    ]
+  },
+  "validation": {
+    "conformance": "semantically_valid",
+    "errors": [],
+    "warnings": []
+  },
+  "affordances": {
+    "role": "work",
+    "actionability": "execute",
+    "normativeSections": [
+      "Objective",
+      "Context / Constraints",
+      "Materially verifiable success criteria",
+      "Execution notes"
+    ]
+  },
+  "extensions": {}
+}
