@@ -4,7 +4,8 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "normalize": "bun run ./src/cli/normalize.ts"
+    "normalize": "bun run ./src/cli/normalize.ts",
+    "validate": "bun run ./src/cli/validate.ts"
   },
   "devDependencies": {
     "@types/bun": "latest"
