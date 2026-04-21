@@ -33,8 +33,9 @@ The MVP intentionally covers only:
   - `project/basic@v1`
   - `brief/basic@v1`
 - discovery, parsing, normalization, and validation
-- a valid and invalid example corpus
 - narrow CLI proof commands for `validate` and `normalize`
+- a resolver-first MCP server surface for runtime integrations
+- a valid and invalid example corpus
 
 The MVP does not include:
 
@@ -45,6 +46,7 @@ The MVP does not include:
 - UI or editor integration
 - workflow automation orchestration
 - a broader project-management ontology
+- host-specific trigger adapters or prompts
 
 ## 2. Canonical Declaration Model
 
@@ -410,7 +412,8 @@ For the MVP, this repository is responsible for:
 1. defining the `agent-markdown` meta-spec
 2. defining the initial profile registry
 3. implementing discovery, parsing, normalization, and validation
-4. providing valid and invalid example documents
+4. exposing the shared resolver semantics through a thin MCP server surface
+5. providing valid and invalid example documents
 
 The first implementation pass should remain docs-first and parser-first.
 
@@ -431,6 +434,7 @@ src/
   parse/
   normalize/
   validate/
+  mcp-server/
 test/
 ```
 
@@ -446,7 +450,30 @@ Required proof commands:
 The CLI exists to prove the core contract. It must not become a broader product
 surface in the MVP.
 
-## 11. Acceptance Criteria
+## 11. MCP Integration Surface
+
+The MVP also includes a resolver-first MCP server surface for runtime
+integrations.
+
+Required entrypoint:
+
+- `bun run mcp`
+
+Required tool surface:
+
+- `agent_markdown.sniff`
+- `agent_markdown.resolve`
+- `agent_markdown.discover`
+- `agent_markdown.explain_profile`
+
+Contract rules:
+
+- the MCP layer must stay thin and reuse the shared resolver semantics
+- transport code must not reinterpret document meaning independently from the
+  shared discovery, profile resolution, normalization, and validation logic
+- host-specific trigger adapters or prompts remain outside the MVP
+
+## 12. Acceptance Criteria
 
 The MVP is acceptable only when all of the following are true:
 
@@ -458,6 +485,8 @@ The MVP is acceptable only when all of the following are true:
   documents without inventing new policy
 - the conformance model is explicit enough for a tool to decide whether to
   inspect, assist with, or gate on a document
+- the shared resolver behavior can be exposed over the MCP server surface
+  without redefining the underlying document contract in transport-specific code
 - the normalized output contract is specific enough to implement typed
   Bun/TypeScript parsing code directly
 

@@ -64,18 +64,31 @@ function assertValidFixture(
   }
 
   const {
-    body: { required_sections: requiredSections },
+    body: {
+      required_sections: requiredSections,
+      optional_sections: optionalSections,
+    },
     discovery: { globs: discoveryGlobs },
     validation: {
       require_nonempty_sections: requiredNonemptySections = [],
       require_checklist_in_success_criteria: requireChecklist = false,
     },
   } = resolution.profile;
+  const topLevelSectionHeadings = sections.sections
+    .filter((section) => section.headingPath.length === 1)
+    .map((section) => section.heading);
+  const allowedTopLevelHeadings = new Set([
+    ...requiredSections,
+    ...optionalSections,
+  ]);
 
   expect(candidate.discoveryMatches).toEqual(discoveryGlobs);
-  expect(sections.sections.map((section) => section.heading)).toEqual(
-    requiredSections,
-  );
+  expect(
+    topLevelSectionHeadings.filter((heading) => requiredSections.includes(heading)),
+  ).toEqual(requiredSections);
+  expect(
+    topLevelSectionHeadings.every((heading) => allowedTopLevelHeadings.has(heading)),
+  ).toBeTrue();
 
   expect(normalized.validation).toEqual({
     conformance: "semantically_valid",

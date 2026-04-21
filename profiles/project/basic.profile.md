@@ -75,6 +75,7 @@ Instance documents governed by this profile should declare:
 - `doc_spec: agent-markdown/0.1`
 - `doc_kind: project`
 - `doc_profile: project/basic@v1`
+- `title: <human-readable project title>`
 
 # Authoring guidance
 
