@@ -993,6 +993,53 @@ Limit the fix to closing html-tag handling in checklist detection.
   });
 });
 
+test("does not keep stale list context after outdented html block closes", () => {
+  expect(
+    composeFixture({
+      path: "plans/list-outdented-html-close-checklists.task.md",
+      discoveryMatches: ["**/*.task.md"],
+      markdown: `---
+doc_spec: agent-markdown/0.1
+doc_kind: task
+doc_profile: task/basic@v1
+title: Stop stale list context after html block closes
+status: ready
+---
+## Objective
+
+Keep checklist detection from preserving stale list context after HTML blocks close outdented.
+
+## Context / Constraints
+
+The HTML block starts nested under a parent list item, but the closing tag is outdented before a later indented checklist-looking line.
+
+## Materially verifiable success criteria
+
+- Parent item
+    <details>
+</details>
+    - [ ] This line should not count after the html block closes outdented.
+
+## Execution notes
+
+Limit the fix to list-context collapse while consuming html block lines.
+`,
+    }).validation,
+  ).toEqual({
+    conformance: "recognized",
+    errors: [
+      {
+        code: "checklist-required",
+        severity: "error",
+        message:
+          'Section "Materially verifiable success criteria" must contain checklist items for profile "task/basic@v1".',
+        path: 'body.sections["Materially verifiable success criteria"]',
+      },
+    ],
+    warnings: [],
+  });
+});
+
 test("does not keep list context across type-1 html block starts", () => {
   for (const tag of ["script", "style", "pre", "textarea"]) {
     expect(

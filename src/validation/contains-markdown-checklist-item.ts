@@ -45,6 +45,7 @@ export function containsMarkdownChecklistItem(markdown: string): boolean {
     }
 
     if (openHtmlBlock !== null) {
+      collapseNestedListIndentations(activeListIndentations, lineIndentation);
       openHtmlBlock = advanceHtmlBlockState(line.content, openHtmlBlock);
       previousLineWasBlank = lineIsBlank;
       previousLineCanContinueParagraph = false;
