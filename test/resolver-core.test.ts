@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve as resolvePath } from "node:path";
+import { join, relative, resolve as resolvePath, win32 } from "node:path";
 
 import {
   type DocumentDiscoveryHint,
@@ -10,10 +10,23 @@ import {
   resolveDocument,
   sniffDocument,
 } from "../index.ts";
+import { isWithinRoot } from "../src/resolver-core/discover-document-paths.ts";
 import { prepareResolverDocument } from "../src/resolver-core/prepared-document.ts";
 
 const repoRoot = resolvePath(import.meta.dir, "..");
 const textDecoder = new TextDecoder();
+
+async function createRepoTempDir(): Promise<string> {
+  return mkdtemp(join(repoRoot, ".tmp-agent-markdown-discovery-"));
+}
+
+function toRepoScopePath(path: string): string {
+  return relative(repoRoot, path);
+}
+
+async function readValidTaskFixtureMarkdown(): Promise<string> {
+  return Bun.file(resolvePath(repoRoot, "examples/valid/task/basic.task.md")).text();
+}
 
 test("sniffDocument detects declared task documents and recommends full resolution", async () => {
   const response = await sniffDocument({
@@ -78,6 +91,29 @@ test("sniffDocument keeps discovery hints available for raw content without decl
       },
     ],
     recommendation: "resolve_informational",
+  });
+});
+
+test("sniffDocument does not recommend full resolution for doc_kind-only frontmatter", async () => {
+  const response = await sniffDocument({
+    input: {
+      kind: "content",
+      content: "---\ndoc_kind: task\n---\n# Notes\n",
+      sourcePath: "notes/random.md",
+    },
+    repoRoot,
+  });
+
+  expect(response).toEqual({
+    frontmatterFound: true,
+    declaration: {
+      docSpec: null,
+      docKind: "task",
+      docProfile: null,
+      title: null,
+    },
+    matchedHints: [],
+    recommendation: "ignore",
   });
 });
 
@@ -449,11 +485,353 @@ test("discoverDocuments applies filters to discovery-only candidates without der
   });
 });
 
+test("discoverDocuments does not surface doc_kind-only files without discovery hints", async () => {
+  const tempRoot = await createRepoTempDir();
+  const scopePath = toRepoScopePath(tempRoot);
+
+  await writeFile(join(tempRoot, "notes.md"), "---\ndoc_kind: task\n---\n# Notes\n");
+
+  try {
+    const response = await discoverDocuments({
+      repoRoot,
+      scopePaths: [scopePath],
+      mode: "informational",
+    });
+
+    expect(response.documents).toEqual([]);
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("discoverDocuments rejects scope paths that resolve outside repoRoot", async () => {
+  const outsideRoot = await mkdtemp(join(tmpdir(), "agent-markdown-discovery-outside-"));
+  const outsideScope = toRepoScopePath(outsideRoot);
+
+  try {
+    await expect(
+      discoverDocuments({
+        repoRoot,
+        scopePaths: [outsideScope],
+        mode: "informational",
+      }),
+    ).rejects.toThrow(`Scope path resolves outside repo root: ${outsideScope}`);
+  } finally {
+    await rm(outsideRoot, { recursive: true, force: true });
+  }
+});
+
+test("discoverDocuments accepts canonical absolute scope paths when repoRoot is a symlink", async () => {
+  const symlinkParent = await mkdtemp(join(tmpdir(), "agent-markdown-repo-alias-"));
+  const symlinkRepoRoot = join(symlinkParent, "repo-alias");
+  const canonicalScopePath = resolvePath(repoRoot, "examples/valid/task/basic.task.md");
+
+  await symlink(repoRoot, symlinkRepoRoot);
+
+  try {
+    const response = await discoverDocuments({
+      repoRoot: symlinkRepoRoot,
+      scopePaths: [canonicalScopePath],
+      mode: "informational",
+    });
+
+    expect(response.documents).toHaveLength(1);
+    expect(response.documents[0]).toMatchObject({
+      path: "examples/valid/task/basic.task.md",
+      declaration: {
+        docProfile: "task/basic@v1",
+      },
+      resolved: {
+        conformance: "semantically_valid",
+      },
+    });
+  } finally {
+    await rm(symlinkParent, { recursive: true, force: true });
+  }
+});
+
+test("discoverDocuments skips symlinked directories that resolve outside repoRoot", async () => {
+  const tempRoot = await createRepoTempDir();
+  const scopePath = toRepoScopePath(tempRoot);
+  const outsideRoot = await mkdtemp(join(tmpdir(), "agent-markdown-discovery-outside-"));
+  const fixtureMarkdown = await readValidTaskFixtureMarkdown();
+
+  await writeFile(join(tempRoot, "inside.task.md"), fixtureMarkdown);
+  await writeFile(join(outsideRoot, "escape.task.md"), fixtureMarkdown);
+  await symlink(outsideRoot, join(tempRoot, "linked-outside"));
+
+  try {
+    const response = await discoverDocuments({
+      repoRoot,
+      scopePaths: [scopePath],
+      mode: "informational",
+    });
+
+    expect(response.documents).toHaveLength(1);
+    expect(response.documents[0]).toMatchObject({
+      path: expect.stringMatching(/inside\.task\.md$/u),
+      declaration: {
+        docProfile: "task/basic@v1",
+      },
+    });
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+    await rm(outsideRoot, { recursive: true, force: true });
+  }
+});
+
+test("discoverDocuments filters declared documents by declared semantics instead of conflicting hints", async () => {
+  const tempRoot = await createRepoTempDir();
+  const scopePath = toRepoScopePath(tempRoot);
+  const fixtureMarkdown = await readValidTaskFixtureMarkdown();
+
+  await writeFile(join(tempRoot, "PROJECT.md"), fixtureMarkdown);
+
+  try {
+    const unfiltered = await discoverDocuments({
+      repoRoot,
+      scopePaths: [scopePath],
+      mode: "informational",
+    });
+    const filteredByKind = await discoverDocuments({
+      repoRoot,
+      scopePaths: [scopePath],
+      docKinds: ["project"],
+      mode: "informational",
+    });
+    const filteredByProfile = await discoverDocuments({
+      repoRoot,
+      scopePaths: [scopePath],
+      profileIds: ["project/basic@v1"],
+      mode: "informational",
+    });
+
+    expect(unfiltered.documents).toHaveLength(1);
+    expect(unfiltered.documents[0]).toMatchObject({
+      declaration: {
+        docKind: "task",
+        docProfile: "task/basic@v1",
+      },
+      discoveryMatches: ["PROJECT.md"],
+    });
+    expect(filteredByKind.documents).toEqual([]);
+    expect(filteredByProfile.documents).toEqual([]);
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("discoverDocuments derives docKinds from declared profiles before considering conflicting hints", async () => {
+  const tempRoot = await createRepoTempDir();
+  const scopePath = toRepoScopePath(tempRoot);
+
+  await writeFile(
+    join(tempRoot, "PROJECT.md"),
+    [
+      "---",
+      "doc_profile: task/basic@v1",
+      'title: "Declared task profile"',
+      "---",
+      "# Notes",
+      "",
+    ].join("\n"),
+  );
+
+  try {
+    const filteredByTaskKind = await discoverDocuments({
+      repoRoot,
+      scopePaths: [scopePath],
+      docKinds: ["task"],
+      mode: "informational",
+    });
+    const filteredByProjectKind = await discoverDocuments({
+      repoRoot,
+      scopePaths: [scopePath],
+      docKinds: ["project"],
+      mode: "informational",
+    });
+    const filteredByProjectProfile = await discoverDocuments({
+      repoRoot,
+      scopePaths: [scopePath],
+      profileIds: ["project/basic@v1"],
+      mode: "informational",
+    });
+
+    expect(filteredByTaskKind.documents).toHaveLength(1);
+    expect(filteredByTaskKind.documents[0]).toMatchObject({
+      declaration: {
+        docKind: null,
+        docProfile: "task/basic@v1",
+      },
+      discoveryMatches: ["PROJECT.md"],
+    });
+    expect(filteredByProjectKind.documents).toEqual([]);
+    expect(filteredByProjectProfile.documents).toEqual([]);
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("discoverDocuments does not let doc_spec-only declarations satisfy hint-based filters", async () => {
+  const tempRoot = await createRepoTempDir();
+  const scopePath = toRepoScopePath(tempRoot);
+
+  await writeFile(
+    join(tempRoot, "TASK.md"),
+    [
+      "---",
+      "doc_spec: agent-markdown/0.1",
+      'title: "Declared spec only"',
+      "---",
+      "# Notes",
+      "",
+    ].join("\n"),
+  );
+
+  try {
+    const unfiltered = await discoverDocuments({
+      repoRoot,
+      scopePaths: [scopePath],
+      mode: "informational",
+    });
+    const filteredByTaskKind = await discoverDocuments({
+      repoRoot,
+      scopePaths: [scopePath],
+      docKinds: ["task"],
+      mode: "informational",
+    });
+    const filteredByTaskProfile = await discoverDocuments({
+      repoRoot,
+      scopePaths: [scopePath],
+      profileIds: ["task/basic@v1"],
+      mode: "informational",
+    });
+
+    expect(unfiltered.documents).toHaveLength(1);
+    expect(unfiltered.documents[0]).toMatchObject({
+      declaration: {
+        docSpec: "agent-markdown/0.1",
+        docKind: null,
+        docProfile: null,
+      },
+      discoveryMatches: ["TASK.md"],
+    });
+    expect(filteredByTaskKind.documents).toEqual([]);
+    expect(filteredByTaskProfile.documents).toEqual([]);
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("discoverDocuments does not let conflicting profile filters override a declared doc_kind", async () => {
+  const tempRoot = await createRepoTempDir();
+  const scopePath = toRepoScopePath(tempRoot);
+
+  await writeFile(
+    join(tempRoot, "TASK.md"),
+    [
+      "---",
+      "doc_kind: project",
+      'title: "Declared project kind"',
+      "---",
+      "# Notes",
+      "",
+    ].join("\n"),
+  );
+
+  try {
+    const unfiltered = await discoverDocuments({
+      repoRoot,
+      scopePaths: [scopePath],
+      mode: "informational",
+    });
+    const filteredByTaskProfile = await discoverDocuments({
+      repoRoot,
+      scopePaths: [scopePath],
+      profileIds: ["task/basic@v1"],
+      mode: "informational",
+    });
+    const filteredByProjectKind = await discoverDocuments({
+      repoRoot,
+      scopePaths: [scopePath],
+      docKinds: ["project"],
+      mode: "informational",
+    });
+
+    expect(unfiltered.documents).toHaveLength(1);
+    expect(unfiltered.documents[0]).toMatchObject({
+      declaration: {
+        docKind: "project",
+        docProfile: null,
+      },
+      discoveryMatches: ["TASK.md"],
+    });
+    expect(filteredByTaskProfile.documents).toEqual([]);
+    expect(filteredByProjectKind.documents).toHaveLength(1);
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("discoverDocuments does not let unknown declared profiles satisfy conflicting hint filters", async () => {
+  const tempRoot = await createRepoTempDir();
+  const scopePath = toRepoScopePath(tempRoot);
+
+  await writeFile(
+    join(tempRoot, "PROJECT.md"),
+    [
+      "---",
+      "doc_profile: task/experimental@v9",
+      'title: "Unknown declared profile"',
+      "---",
+      "# Notes",
+      "",
+    ].join("\n"),
+  );
+
+  try {
+    const unfiltered = await discoverDocuments({
+      repoRoot,
+      scopePaths: [scopePath],
+      mode: "informational",
+    });
+    const filteredByProjectKind = await discoverDocuments({
+      repoRoot,
+      scopePaths: [scopePath],
+      docKinds: ["project"],
+      mode: "informational",
+    });
+    const filteredByTaskProfile = await discoverDocuments({
+      repoRoot,
+      scopePaths: [scopePath],
+      profileIds: ["task/basic@v1"],
+      mode: "informational",
+    });
+
+    expect(unfiltered.documents).toHaveLength(1);
+    expect(unfiltered.documents[0]).toMatchObject({
+      declaration: {
+        docKind: null,
+        docProfile: "task/experimental@v9",
+      },
+      discoveryMatches: ["PROJECT.md"],
+      resolved: {
+        profile: {
+          reason: "unknown_profile",
+        },
+      },
+    });
+    expect(filteredByProjectKind.documents).toEqual([]);
+    expect(filteredByTaskProfile.documents).toEqual([]);
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("discoverDocuments does not exclude instance documents just because they include a profile_id field", async () => {
-  const tempRoot = await mkdtemp(join(tmpdir(), "agent-markdown-discovery-"));
-  const sourceMarkdown = await Bun.file(
-    resolvePath(repoRoot, "examples/valid/task/basic.task.md"),
-  ).text();
+  const tempRoot = await createRepoTempDir();
+  const scopePath = toRepoScopePath(tempRoot);
+  const sourceMarkdown = await readValidTaskFixtureMarkdown();
   const markdownWithProfileId = sourceMarkdown.replace(
     "doc_profile: task/basic@v1\n",
     'doc_profile: task/basic@v1\nprofile_id: "not-a-profile-spec"\n',
@@ -464,7 +842,7 @@ test("discoverDocuments does not exclude instance documents just because they in
   try {
     const response = await discoverDocuments({
       repoRoot,
-      scopePaths: [tempRoot],
+      scopePaths: [scopePath],
       mode: "informational",
     });
 
@@ -491,10 +869,9 @@ test("discoverDocuments excludes profile definition markdown from results", asyn
 });
 
 test("discoverDocuments avoids following directory symlink cycles", async () => {
-  const tempRoot = await mkdtemp(join(tmpdir(), "agent-markdown-discovery-"));
-  const fixtureMarkdown = await Bun.file(
-    resolvePath(repoRoot, "examples/valid/task/basic.task.md"),
-  ).text();
+  const tempRoot = await createRepoTempDir();
+  const scopePath = toRepoScopePath(tempRoot);
+  const fixtureMarkdown = await readValidTaskFixtureMarkdown();
 
   await mkdir(join(tempRoot, "nested"));
   await writeFile(join(tempRoot, "loop.task.md"), fixtureMarkdown);
@@ -510,7 +887,7 @@ test("discoverDocuments avoids following directory symlink cycles", async () => 
 
           const result = await discoverDocuments({
             repoRoot: ${JSON.stringify(repoRoot)},
-            scopePaths: [${JSON.stringify(tempRoot)}],
+            scopePaths: [${JSON.stringify(scopePath)}],
             mode: "informational",
           });
 
@@ -543,10 +920,9 @@ test("discoverDocuments avoids following directory symlink cycles", async () => 
 });
 
 test("discoverDocuments skips dangling symlinks without aborting the walk", async () => {
-  const tempRoot = await mkdtemp(join(tmpdir(), "agent-markdown-discovery-"));
-  const fixtureMarkdown = await Bun.file(
-    resolvePath(repoRoot, "examples/valid/task/basic.task.md"),
-  ).text();
+  const tempRoot = await createRepoTempDir();
+  const scopePath = toRepoScopePath(tempRoot);
+  const fixtureMarkdown = await readValidTaskFixtureMarkdown();
 
   await mkdir(join(tempRoot, "nested"));
   await writeFile(join(tempRoot, "task.task.md"), fixtureMarkdown);
@@ -558,7 +934,7 @@ test("discoverDocuments skips dangling symlinks without aborting the walk", asyn
   try {
     const response = await discoverDocuments({
       repoRoot,
-      scopePaths: [tempRoot],
+      scopePaths: [scopePath],
       mode: "informational",
     });
 
@@ -575,6 +951,15 @@ test("discoverDocuments skips dangling symlinks without aborting the walk", asyn
   } finally {
     await rm(tempRoot, { recursive: true, force: true });
   }
+});
+
+test("isWithinRoot rejects Windows paths on different drives", () => {
+  expect(
+    isWithinRoot("C:\\repo\\docs\\inside.md", "C:\\repo", win32),
+  ).toBe(true);
+  expect(
+    isWithinRoot("D:\\outside\\escape.md", "C:\\repo", win32),
+  ).toBe(false);
 });
 
 test("explainProfile derives a reusable summary from the loaded registry entry", async () => {

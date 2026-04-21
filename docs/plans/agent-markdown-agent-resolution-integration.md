@@ -200,7 +200,7 @@ Purpose:
 Inputs:
 
 - repository root
-- optional path scope
+- optional path scope constrained to that repository
 - optional profile or kind filters
 - optional operating mode
 
@@ -253,6 +253,7 @@ Agents should consider calling the resolver when any of the following happens:
 1. If the file is not Markdown, do nothing.
 2. Call `agent_markdown.sniff` or equivalent lightweight frontmatter detection.
 3. If `doc_spec` or `doc_profile` is present, call `agent_markdown.resolve`.
+   `doc_kind` alone is not a sufficient declaration signal.
 4. If no declaration is present but profile discovery hints match, optionally
    call `agent_markdown.resolve` in `informational` mode.
 5. If neither declaration nor discovery hints match, treat the file as ordinary
