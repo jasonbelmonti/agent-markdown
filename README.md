@@ -103,6 +103,32 @@ The MCP layer is intentionally thin. It exposes canonical discovery and
 resolution behavior to agent runtimes without moving document semantics into
 host-specific prompts.
 
+Operators can start the resolver server over stdio against the current working
+tree or an explicit repository root:
+
+```bash
+bun run mcp
+bun run mcp --repo-root /absolute/path/to/repository
+```
+
+The tool surface is meant to support a staged resolver workflow:
+
+- `agent_markdown.sniff` cheaply inspects Markdown content or a Markdown path
+  for declarations and discovery hints before paying full resolution cost.
+- `agent_markdown.resolve` runs the full shared resolver pipeline and returns
+  the normalized document, profile resolution, validation state, and runtime
+  trust guidance.
+- `agent_markdown.discover` scans one or more repository paths for candidate
+  documents and optionally resolves them in bulk.
+- `agent_markdown.explain_profile` returns the loaded profile contract plus a
+  concise summary that is useful for authoring guidance and validation
+  explanations.
+
+This resolver service is the canonical runtime integration surface for the MVP.
+Thin host instructions may tell an agent when to call it, but host-specific
+Codex, Claude, editor, or workflow trigger adapters remain explicitly deferred
+to a later phase.
+
 ## Repository Layout
 
 ```text

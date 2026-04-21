@@ -9,6 +9,10 @@ import {
   AgentMarkdownMcpBootstrapError,
   agentMarkdownResolverToolNames,
   createAgentMarkdownMcpServer,
+  discoverDocuments,
+  explainProfile,
+  resolveDocument,
+  sniffDocument,
   startAgentMarkdownMcpStdioServer,
 } from "../index.ts";
 
@@ -39,22 +43,23 @@ test("starts a stdio MCP server that exposes the four resolver tools", async () 
     expect(tool.inputSchema?.type).toBe("object");
     expect(tool.outputSchema?.type).toBe("object");
   }
+});
 
-  const sniffResult = await client.callTool(agentMarkdownResolverToolNames.sniff, {
+test("routes sniff through the shared resolver facade", async () => {
+  const client = await createTestClient();
+  const request = {
     input: {
       kind: "path",
       path: "examples/valid/task/basic.task.md",
     },
+  } as const;
+  const expected = await sniffDocument({
+    ...request,
+    repoRoot,
   });
+  const result = await client.callTool(agentMarkdownResolverToolNames.sniff, request);
 
-  expect(sniffResult.isError).toBeUndefined();
-  expect(sniffResult.structuredContent).toMatchObject({
-    recommendation: "resolve",
-    declaration: {
-      docKind: "task",
-      docProfile: "task/basic@v1",
-    },
-  });
+  expectSuccessfulToolResult(result, expected);
 });
 
 test("returns deterministic unsupported-input tool errors", async () => {
@@ -79,21 +84,54 @@ test("returns deterministic unsupported-input tool errors", async () => {
   });
 });
 
-test("allows discover to omit repoRoot when the server was bootstrapped with one", async () => {
+test("routes resolve through the shared resolver facade", async () => {
   const client = await createTestClient();
+  const request = {
+    input: {
+      kind: "path",
+      path: "examples/valid/task/basic.task.md",
+    },
+    mode: "assistive",
+  } as const;
+  const expected = await resolveDocument({
+    ...request,
+    repoRoot,
+  });
+  const result = await client.callTool(agentMarkdownResolverToolNames.resolve, request);
 
-  const result = await client.callTool(agentMarkdownResolverToolNames.discover, {
+  expectSuccessfulToolResult(result, expected);
+});
+
+test("routes discover through the shared resolver facade and defaults repoRoot", async () => {
+  const client = await createTestClient();
+  const request = {
     scopePaths: ["examples/valid"],
+    mode: "informational",
+  } as const;
+  const expected = await discoverDocuments({
+    ...request,
+    repoRoot,
   });
+  const result = await client.callTool(agentMarkdownResolverToolNames.discover, request);
 
-  expect(result.isError).toBeUndefined();
-  expect(result.structuredContent).toMatchObject({
-    documents: expect.arrayContaining([
-      expect.objectContaining({
-        path: expect.stringContaining("examples/valid/task/basic.task.md"),
-      }),
-    ]),
+  expectSuccessfulToolResult(result, expected);
+});
+
+test("routes explain_profile through the shared resolver facade", async () => {
+  const client = await createTestClient();
+  const request = {
+    profileId: "task/basic@v1",
+  } as const;
+  const expected = await explainProfile({
+    ...request,
+    repoRoot,
   });
+  const result = await client.callTool(
+    agentMarkdownResolverToolNames.explainProfile,
+    request,
+  );
+
+  expectSuccessfulToolResult(result, expected);
 });
 
 test("fails startup deterministically when the resolver context cannot load", async () => {
@@ -238,4 +276,17 @@ class TestMcpClient {
 interface JsonRpcResponse {
   id: number;
   result: any;
+}
+
+function expectSuccessfulToolResult(
+  result: {
+    content: Array<{ text?: string }>;
+    structuredContent?: Record<string, unknown>;
+    isError?: boolean;
+  },
+  expected: object,
+): void {
+  expect(result.isError).toBeUndefined();
+  expect(result.structuredContent).toEqual(expected);
+  expect(result.content[0]?.text).toBe(JSON.stringify(expected));
 }
