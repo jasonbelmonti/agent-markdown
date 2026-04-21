@@ -33,14 +33,14 @@ export async function discoverDocuments(
   const documents: DiscoverResponse["documents"] = [];
 
   for (const absolutePath of markdownPaths) {
-    const preparedDocument = await prepareResolverDocument({
-      input: {
-        kind: "path",
-        path: absolutePath,
-      },
-      repoRoot: context.repoRoot,
-      discoveryHints: context.discoveryHints,
-    });
+    const preparedDocument = await tryPrepareDiscoverDocument(
+      absolutePath,
+      context,
+    );
+
+    if (preparedDocument === null) {
+      continue;
+    }
 
     if (isProfileSpecification(preparedDocument)) {
       continue;
@@ -58,7 +58,7 @@ export async function discoverDocuments(
 
     if (
       !matchesDiscoverFilters(
-        context.registry,
+        context.registry.profilesById,
         preparedDocument.candidate,
         declaration,
         request,
@@ -83,6 +83,28 @@ export async function discoverDocuments(
   }
 
   return { documents };
+}
+
+async function tryPrepareDiscoverDocument(
+  absolutePath: string,
+  context: ResolverContext,
+): Promise<PreparedResolverDocument | null> {
+  try {
+    return await prepareResolverDocument({
+      input: {
+        kind: "path",
+        path: absolutePath,
+      },
+      repoRoot: context.repoRoot,
+      discoveryHints: context.discoveryHints,
+    });
+  } catch (error) {
+    if (isMalformedFrontmatterError(error)) {
+      return null;
+    }
+
+    throw error;
+  }
 }
 
 async function createResolvedSummary(
@@ -126,7 +148,7 @@ function matchesDiscoverFilters(
   if (request.docKinds && request.docKinds.length > 0) {
     const matchedDocKinds = new Set<string>();
 
-    if (declaration?.docKind !== null) {
+    if (typeof declaration?.docKind === "string") {
       matchedDocKinds.add(declaration.docKind);
     }
 
@@ -143,7 +165,7 @@ function matchesDiscoverFilters(
   if (request.profileIds && request.profileIds.length > 0) {
     const matchedProfileIds = new Set<string>();
 
-    if (declaration?.docProfile !== null) {
+    if (typeof declaration?.docProfile === "string") {
       matchedProfileIds.add(declaration.docProfile);
     }
 
@@ -242,10 +264,17 @@ async function collectSymbolicLinkMarkdownPaths(
 function isProfileSpecification(
   preparedDocument: PreparedResolverDocument,
 ): boolean {
+  return preparedDocument.discoveredDocument.source.path.endsWith(".profile.md");
+}
+
+function isMalformedFrontmatterError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
   return (
-    preparedDocument.discoveredDocument.source.path.endsWith(".profile.md") ||
-    typeof preparedDocument.discoveredDocument.source.rawFrontmatter.profile_id ===
-      "string"
+    error.message.includes("has malformed YAML frontmatter") ||
+    error.message.includes("frontmatter must parse to a mapping")
   );
 }
 

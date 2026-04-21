@@ -272,6 +272,95 @@ test("discoverDocuments returns deterministic summaries for declared and discove
   });
 });
 
+test("discoverDocuments skips malformed frontmatter files instead of aborting the scan", async () => {
+  const response = await discoverDocuments({
+    repoRoot,
+    scopePaths: ["examples"],
+    mode: "informational",
+  });
+
+  expect(
+    response.documents.some(
+      (document) => document.path === "examples/valid/task/basic.task.md",
+    ),
+  ).toBe(true);
+  expect(
+    response.documents.some(
+      (document) =>
+        document.path === "examples/invalid/declaration/malformed-frontmatter.task.md",
+    ),
+  ).toBe(false);
+});
+
+test("discoverDocuments applies docKinds filters to declared documents without crashing", async () => {
+  const response = await discoverDocuments({
+    repoRoot,
+    scopePaths: ["examples/valid/task/basic.task.md"],
+    docKinds: ["task"],
+    mode: "informational",
+  });
+
+  expect(response.documents).toHaveLength(1);
+  expect(response.documents[0]).toMatchObject({
+    path: "examples/valid/task/basic.task.md",
+    declaration: {
+      docKind: "task",
+    },
+  });
+});
+
+test("discoverDocuments applies filters to discovery-only candidates without dereferencing null declarations", async () => {
+  const response = await discoverDocuments({
+    repoRoot,
+    scopePaths: ["examples/invalid/declaration/undeclared.task.md"],
+    docKinds: ["task"],
+    profileIds: ["task/basic@v1"],
+    mode: "informational",
+  });
+
+  expect(response.documents).toHaveLength(1);
+  expect(response.documents[0]).toMatchObject({
+    path: "examples/invalid/declaration/undeclared.task.md",
+    declaration: null,
+    resolved: {
+      profile: {
+        reason: "undeclared_profile",
+      },
+    },
+  });
+});
+
+test("discoverDocuments does not exclude instance documents just because they include a profile_id field", async () => {
+  const tempRoot = await mkdtemp(join(tmpdir(), "agent-markdown-discovery-"));
+  const sourceMarkdown = await Bun.file(
+    resolvePath(repoRoot, "examples/valid/task/basic.task.md"),
+  ).text();
+  const markdownWithProfileId = sourceMarkdown.replace(
+    "doc_profile: task/basic@v1\n",
+    'doc_profile: task/basic@v1\nprofile_id: "not-a-profile-spec"\n',
+  );
+
+  await writeFile(join(tempRoot, "instance.task.md"), markdownWithProfileId);
+
+  try {
+    const response = await discoverDocuments({
+      repoRoot,
+      scopePaths: [tempRoot],
+      mode: "informational",
+    });
+
+    expect(response.documents).toHaveLength(1);
+    expect(response.documents[0]).toMatchObject({
+      path: expect.stringMatching(/instance\.task\.md$/u),
+      declaration: {
+        docProfile: "task/basic@v1",
+      },
+    });
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("discoverDocuments excludes profile definition markdown from results", async () => {
   const response = await discoverDocuments({
     repoRoot,
