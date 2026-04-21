@@ -947,6 +947,52 @@ Limit the fix to void html-block handling in checklist detection.
   });
 });
 
+test("does not keep list context across closing html tags", () => {
+  expect(
+    composeFixture({
+      path: "plans/list-closing-html-tag-checklists.task.md",
+      discoveryMatches: ["**/*.task.md"],
+      markdown: `---
+doc_spec: agent-markdown/0.1
+doc_kind: task
+doc_profile: task/basic@v1
+title: Stop list context at closing html tags
+status: ready
+---
+## Objective
+
+Keep lazy continuation handling from crossing closing HTML tags.
+
+## Context / Constraints
+
+A closing HTML tag like </details> should terminate lazy continuation before a later indented checklist-looking line.
+
+## Materially verifiable success criteria
+
+10. Parent item
+</details>
+    - [ ] This line should not count after the closing html tag.
+
+## Execution notes
+
+Limit the fix to closing html-tag handling in checklist detection.
+`,
+    }).validation,
+  ).toEqual({
+    conformance: "recognized",
+    errors: [
+      {
+        code: "checklist-required",
+        severity: "error",
+        message:
+          'Section "Materially verifiable success criteria" must contain checklist items for profile "task/basic@v1".',
+        path: 'body.sections["Materially verifiable success criteria"]',
+      },
+    ],
+    warnings: [],
+  });
+});
+
 test("does not keep list context across type-1 html block starts", () => {
   for (const tag of ["script", "style", "pre", "textarea"]) {
     expect(

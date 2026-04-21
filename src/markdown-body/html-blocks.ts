@@ -42,6 +42,7 @@ const commentHtmlBlockStartPattern = /^<!--/u;
 const processingInstructionHtmlBlockStartPattern = /^<\?\w?/u;
 const cdataHtmlBlockStartPattern = /^<!\[CDATA\[/u;
 const declarationHtmlBlockStartPattern = /^<![A-Z]/iu;
+const closingHtmlTagPattern = /^<\/([A-Za-z][A-Za-z0-9-]*)\s*>\s*$/iu;
 const rawHtmlTagPattern = /^<(pre|script|style|textarea)\b/iu;
 const openingHtmlTagPattern =
   /^<([A-Za-z][A-Za-z0-9-]*)(?:\s[^>]*)?\s*(\/?)>/iu;
@@ -70,6 +71,10 @@ export function readHtmlBlockStart(
 
   if (declarationHtmlBlockStartPattern.test(blockContent)) {
     return { kind: "declaration" };
+  }
+
+  if (closingHtmlTagPattern.test(blockContent)) {
+    return { kind: "single-line-tag" };
   }
 
   const rawTagName = readRawHtmlTagName(blockContent);
