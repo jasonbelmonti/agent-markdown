@@ -247,6 +247,22 @@ Visible note.
   });
 }
 
+test("does not suppress later headings after inline html tag lines", () => {
+  const markdown = `## Objective
+
+<span>Inline note without a closing tag
+
+## Notes
+
+Visible heading parsing should continue.
+`;
+
+  expect(parseMarkdownSections(markdown).sections.map((section) => section.heading)).toEqual([
+    "Objective",
+    "Notes",
+  ]);
+});
+
 for (const tagName of htmlRawTagNames) {
   test(`resumes heading parsing after single-line <${tagName}> blocks`, () => {
     const markdown = `## Objective

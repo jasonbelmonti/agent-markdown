@@ -34,6 +34,63 @@ const htmlVoidTagNames = new Set([
   "track",
   "wbr",
 ]);
+const htmlWrapperTagNames = new Set([
+  "address",
+  "article",
+  "aside",
+  "blockquote",
+  "body",
+  "caption",
+  "center",
+  "colgroup",
+  "dd",
+  "details",
+  "dialog",
+  "dir",
+  "div",
+  "dl",
+  "dt",
+  "fieldset",
+  "figcaption",
+  "figure",
+  "footer",
+  "form",
+  "frame",
+  "frameset",
+  "h1",
+  "h2",
+  "h3",
+  "h4",
+  "h5",
+  "h6",
+  "head",
+  "header",
+  "html",
+  "iframe",
+  "legend",
+  "li",
+  "main",
+  "menu",
+  "menuitem",
+  "nav",
+  "noframes",
+  "ol",
+  "optgroup",
+  "option",
+  "p",
+  "search",
+  "section",
+  "summary",
+  "table",
+  "tbody",
+  "td",
+  "tfoot",
+  "th",
+  "thead",
+  "title",
+  "tr",
+  "ul",
+]);
 const terminatorBlockDefinitions: TerminatorBlockDefinition[] = [
   {
     blockKind: "comment",
@@ -108,6 +165,10 @@ export function readHtmlBlockStart(
       kind: "single-line-structural",
       structuralKind: "void-tag",
     };
+  }
+
+  if (!isWrapperHtmlTagName(openingTag.tagName)) {
+    return null;
   }
 
   return readMatchingTagBlock(blockContent, "wrapper-tag", openingTag.tagName);
@@ -195,6 +256,10 @@ function readRawHtmlTagName(blockContent: string): RawHtmlTagName | null {
     default:
       return null;
   }
+}
+
+function isWrapperHtmlTagName(tagName: string): boolean {
+  return tagName.includes("-") || htmlWrapperTagNames.has(tagName);
 }
 
 function escapeForRegExp(value: string): string {

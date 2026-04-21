@@ -147,6 +147,12 @@ test("keeps generic wrappers open until a matching close tag", () => {
   expect(advanceHtmlBlockState("</custom-tag>", state)).toBeNull();
 });
 
+test("does not treat inline html tags as block starters", () => {
+  expect(readHtmlBlockStart("<span>note")).toBeNull();
+  expect(readHtmlBlockStart("<span>note</span>")).toBeNull();
+  expect(readHtmlBlockStart("<em>note</em>")).toBeNull();
+});
+
 test("closes raw-tag blocks when their matching close tag appears later", () => {
   const state = expectOpenState("<script>", {
     kind: "matching-tag-block",

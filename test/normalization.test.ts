@@ -695,6 +695,44 @@ Limit the fix to closing one-line raw HTML block states correctly.
   });
 }
 
+test("keeps checklist detection active after inline html tag lines", () => {
+  expect(
+    composeFixture({
+      path: "plans/inline-html-checklists.task.md",
+      discoveryMatches: ["**/*.task.md"],
+      markdown: `---
+doc_spec: agent-markdown/0.1
+doc_kind: task
+doc_profile: task/basic@v1
+title: Resume after inline html tag lines
+status: ready
+---
+## Objective
+
+Keep visible checklist items countable after inline HTML lines.
+
+## Context / Constraints
+
+The inline <span> line appears before the only visible checklist item and never closes.
+
+## Materially verifiable success criteria
+
+<span>Inline note without a later closing tag.
+
+- [ ] Visible checklist remains valid.
+
+## Execution notes
+
+Limit the fix to excluding inline HTML tags from shared HTML-block classification.
+`,
+    }).validation,
+  ).toEqual({
+    conformance: "semantically_valid",
+    errors: [],
+    warnings: [],
+  });
+});
+
 test("keeps list context across continuation paragraphs", () => {
   expect(
     composeFixture({
