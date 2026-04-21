@@ -21,8 +21,9 @@ host-specific automation behavior.
 - MCP entrypoint:
   - `bun run mcp`
 - Programmatic exports from [`index.ts`](./index.ts):
-  - core model, profile registry, validation, normalization
+  - core model, profile registry, normalization
   - resolver core
+  - document discovery and markdown-body helpers
   - MCP bootstrap helpers
   - resolver transport types
 
