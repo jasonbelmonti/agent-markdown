@@ -38,7 +38,11 @@ export async function listScopedMarkdownPaths(
 
   for (const scopePath of scopedPaths) {
     await collectMarkdownPaths({
-      absolutePath: resolveScopedPath(repoRoot, scopePath),
+      absolutePath: await resolveScopedPath(
+        repoRoot,
+        canonicalRepoRoot,
+        scopePath,
+      ),
       ...walkContext,
     });
   }
@@ -151,14 +155,51 @@ function collectMarkdownFile(
   }
 }
 
-function resolveScopedPath(repoRoot: string, scopePath: string): string {
+async function resolveScopedPath(
+  repoRoot: string,
+  canonicalRepoRoot: string,
+  scopePath: string,
+): Promise<string> {
   const resolvedScopePath = resolvePath(repoRoot, scopePath);
+  const canonicalScopePath = await realpath(resolvedScopePath).catch(() => null);
 
-  if (!isWithinRoot(resolvedScopePath, repoRoot)) {
-    throw new Error(`Scope path resolves outside repo root: ${scopePath}`);
+  if (canonicalScopePath !== null) {
+    return reanchorScopedPath({
+      repoRoot,
+      canonicalRepoRoot,
+      scopePath,
+      containmentPath: canonicalScopePath,
+    });
   }
 
-  return resolvedScopePath;
+  if (isWithinRoot(resolvedScopePath, repoRoot)) {
+    return resolvedScopePath;
+  }
+
+  return reanchorScopedPath({
+    repoRoot,
+    canonicalRepoRoot,
+    scopePath,
+    containmentPath: resolvedScopePath,
+  });
+}
+
+function reanchorScopedPath(options: {
+  repoRoot: string;
+  canonicalRepoRoot: string;
+  scopePath: string;
+  containmentPath: string;
+}): string {
+  if (!isWithinRoot(options.containmentPath, options.canonicalRepoRoot)) {
+    throw new Error(`Scope path resolves outside repo root: ${options.scopePath}`);
+  }
+
+  const repoRelativeScopePath = relative(
+    options.canonicalRepoRoot,
+    options.containmentPath,
+  );
+
+  return resolvePath(options.repoRoot, repoRelativeScopePath);
 }
 
 export function isWithinRoot(

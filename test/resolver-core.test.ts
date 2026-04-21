@@ -521,6 +521,35 @@ test("discoverDocuments rejects scope paths that resolve outside repoRoot", asyn
   }
 });
 
+test("discoverDocuments accepts canonical absolute scope paths when repoRoot is a symlink", async () => {
+  const symlinkParent = await mkdtemp(join(tmpdir(), "agent-markdown-repo-alias-"));
+  const symlinkRepoRoot = join(symlinkParent, "repo-alias");
+  const canonicalScopePath = resolvePath(repoRoot, "examples/valid/task/basic.task.md");
+
+  await symlink(repoRoot, symlinkRepoRoot);
+
+  try {
+    const response = await discoverDocuments({
+      repoRoot: symlinkRepoRoot,
+      scopePaths: [canonicalScopePath],
+      mode: "informational",
+    });
+
+    expect(response.documents).toHaveLength(1);
+    expect(response.documents[0]).toMatchObject({
+      path: "examples/valid/task/basic.task.md",
+      declaration: {
+        docProfile: "task/basic@v1",
+      },
+      resolved: {
+        conformance: "semantically_valid",
+      },
+    });
+  } finally {
+    await rm(symlinkParent, { recursive: true, force: true });
+  }
+});
+
 test("discoverDocuments skips symlinked directories that resolve outside repoRoot", async () => {
   const tempRoot = await createRepoTempDir();
   const scopePath = toRepoScopePath(tempRoot);
