@@ -1,6 +1,10 @@
 import { expect, test } from "bun:test";
 
 import { parseMarkdownSections } from "../index.ts";
+import {
+  htmlBlockFixtureWrappers,
+  htmlRawTagNames,
+} from "./support/html-block-fixtures.ts";
 
 test("parses ordered sections with heading paths while leaving preamble in raw body only", () => {
   const markdown = `Intro text that remains source-only.
@@ -209,3 +213,65 @@ Ship it.
     ],
   });
 });
+
+for (const wrapper of htmlBlockFixtureWrappers) {
+  test(`ignores headings inside ${wrapper.label}`, () => {
+    const markdown = `## Objective
+
+${wrapper.start}
+
+## Hidden
+
+${wrapper.end}
+
+## Notes
+
+Visible note.
+`;
+
+    expect(
+      parseMarkdownSections(markdown).sections.map((section) => ({
+        heading: section.heading,
+        headingPath: section.headingPath,
+      })),
+    ).toEqual([
+      {
+        heading: "Objective",
+        headingPath: ["Objective"],
+      },
+      {
+        heading: "Notes",
+        headingPath: ["Notes"],
+      },
+    ]);
+  });
+}
+
+for (const tagName of htmlRawTagNames) {
+  test(`resumes heading parsing after single-line <${tagName}> blocks`, () => {
+    const markdown = `## Objective
+
+<${tagName}>Hidden content</${tagName}>
+
+## Notes
+
+Visible note.
+`;
+
+    expect(
+      parseMarkdownSections(markdown).sections.map((section) => ({
+        heading: section.heading,
+        headingPath: section.headingPath,
+      })),
+    ).toEqual([
+      {
+        heading: "Objective",
+        headingPath: ["Objective"],
+      },
+      {
+        heading: "Notes",
+        headingPath: ["Notes"],
+      },
+    ]);
+  });
+}

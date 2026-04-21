@@ -10,6 +10,10 @@ import {
   type NormalizedDocument,
   type LoadedProfileRegistry,
 } from "../index.ts";
+import {
+  htmlBlockFixtureWrappers,
+  htmlRawTagNames,
+} from "./support/html-block-fixtures.ts";
 
 const repoRoot = resolvePath(import.meta.dir, "..");
 
@@ -49,6 +53,17 @@ function composeFixture(options: ComposeFixtureOptions): NormalizedDocument {
     parsedBody,
     contentHash,
   });
+}
+
+function createHiddenHtmlFixturePath(
+  wrapperFixtureSlug: string,
+  fixtureKind: "section" | "checklist",
+): string {
+  return `plans/hidden-${wrapperFixtureSlug}-${fixtureKind}.task.md`;
+}
+
+function createListIndentedHtmlFixturePath(wrapperFixtureSlug: string): string {
+  return `plans/list-indented-${wrapperFixtureSlug}-checklist.task.md`;
 }
 
 test("composes a normalized envelope from resolved declaration, profile, metadata, and body seams", () => {
@@ -375,6 +390,56 @@ Keep every other required section valid so the placement bug is isolated.
   });
 });
 
+for (const wrapper of htmlBlockFixtureWrappers) {
+  test(`does not treat required sections hidden inside ${wrapper.label} as real sections`, () => {
+    expect(
+      composeFixture({
+        path: createHiddenHtmlFixturePath(wrapper.fixtureSlug, "section"),
+        discoveryMatches: ["**/*.task.md"],
+        markdown: `---
+doc_spec: agent-markdown/0.1
+doc_kind: task
+doc_profile: task/basic@v1
+title: Hidden required sections stay invalid
+status: ready
+---
+## Objective
+
+Keep hidden headings from satisfying required sections.
+
+## Context / Constraints
+
+The only success-criteria heading in this fixture is hidden inside ${wrapper.label}.
+
+${wrapper.start}
+
+## Materially verifiable success criteria
+
+- [ ] Hidden checklist only.
+
+${wrapper.end}
+
+## Execution notes
+
+Keep the rest of the document valid.
+`,
+      }).validation,
+    ).toEqual({
+      conformance: "recognized",
+      errors: [
+        {
+          code: "required-section-missing",
+          severity: "error",
+          message:
+            'Required section "Materially verifiable success criteria" is missing for profile "task/basic@v1".',
+          path: 'body.sections["Materially verifiable success criteria"]',
+        },
+      ],
+      warnings: [],
+    });
+  });
+}
+
 test("accepts checklist items inside nested success-criteria subsections", () => {
   expect(
     composeFixture({
@@ -488,6 +553,147 @@ Limit the fix to structural checklist detection.
     warnings: [],
   });
 });
+
+for (const wrapper of htmlBlockFixtureWrappers) {
+  test(`does not count checklist items hidden inside ${wrapper.label}`, () => {
+    expect(
+      composeFixture({
+        path: createHiddenHtmlFixturePath(wrapper.fixtureSlug, "checklist"),
+        discoveryMatches: ["**/*.task.md"],
+        markdown: `---
+doc_spec: agent-markdown/0.1
+doc_kind: task
+doc_profile: task/basic@v1
+title: Hidden checklist items stay invalid
+status: ready
+---
+## Objective
+
+Keep hidden checklist syntax from satisfying validation.
+
+## Context / Constraints
+
+The only task-list marker in this section is hidden inside ${wrapper.label}.
+
+## Materially verifiable success criteria
+
+${wrapper.start}
+
+- [ ] Hidden checklist only.
+
+${wrapper.end}
+
+## Execution notes
+
+Keep every other structural requirement valid.
+`,
+      }).validation,
+    ).toEqual({
+      conformance: "recognized",
+      errors: [
+        {
+          code: "checklist-required",
+          severity: "error",
+          message:
+            'Section "Materially verifiable success criteria" must contain checklist items for profile "task/basic@v1".',
+          path: 'body.sections["Materially verifiable success criteria"]',
+        },
+      ],
+      warnings: [],
+    });
+  });
+}
+
+for (const wrapper of htmlBlockFixtureWrappers) {
+  test(`does not count checklist items hidden inside list-indented ${wrapper.label}`, () => {
+    expect(
+      composeFixture({
+        path: createListIndentedHtmlFixturePath(wrapper.fixtureSlug),
+        discoveryMatches: ["**/*.task.md"],
+        markdown: `---
+doc_spec: agent-markdown/0.1
+doc_kind: task
+doc_profile: task/basic@v1
+title: List-indented hidden checklist items stay invalid
+status: ready
+---
+## Objective
+
+Keep list-indented HTML wrappers from satisfying checklist validation.
+
+## Context / Constraints
+
+The only task-list marker in this section is hidden inside ${wrapper.label} nested under a parent list item.
+
+## Materially verifiable success criteria
+
+- Parent item
+    ${wrapper.start}
+
+    - [ ] Hidden checklist only.
+
+    ${wrapper.end}
+
+## Execution notes
+
+Keep every other structural requirement valid.
+`,
+      }).validation,
+    ).toEqual({
+      conformance: "recognized",
+      errors: [
+        {
+          code: "checklist-required",
+          severity: "error",
+          message:
+            'Section "Materially verifiable success criteria" must contain checklist items for profile "task/basic@v1".',
+          path: 'body.sections["Materially verifiable success criteria"]',
+        },
+      ],
+      warnings: [],
+    });
+  });
+}
+
+for (const tag of htmlRawTagNames) {
+  test(`keeps checklist scanning active after single-line <${tag}> blocks`, () => {
+    expect(
+      composeFixture({
+        path: `plans/single-line-${tag}-blocks.task.md`,
+        discoveryMatches: ["**/*.task.md"],
+        markdown: `---
+doc_spec: agent-markdown/0.1
+doc_kind: task
+doc_profile: task/basic@v1
+title: Resume after single-line ${tag} blocks
+status: ready
+---
+## Objective
+
+Keep visible checklist items countable after one-line raw HTML blocks.
+
+## Context / Constraints
+
+The single-line <${tag}> block appears before the only visible checklist item.
+
+## Materially verifiable success criteria
+
+<${tag}>- [ ] Hidden checklist only.</${tag}>
+
+- [ ] Visible checklist remains valid.
+
+## Execution notes
+
+Limit the fix to closing one-line raw HTML block states correctly.
+`,
+      }).validation,
+    ).toEqual({
+      conformance: "semantically_valid",
+      errors: [],
+      warnings: [],
+    });
+  });
+}
 
 test("keeps list context across continuation paragraphs", () => {
   expect(
@@ -673,6 +879,7 @@ An HTML block start like <details> should terminate lazy continuation before a l
 10. Parent item
 <details>
     - [ ] This line should not count after the html block starts.
+</details>
 
 ## Execution notes
 
@@ -720,6 +927,7 @@ An HTML block start like <${tag}> should terminate lazy continuation before a la
 10. Parent item
 <${tag}>
     - [ ] This line should not count after the html block starts.
+</${tag}>
 
 ## Execution notes
 
