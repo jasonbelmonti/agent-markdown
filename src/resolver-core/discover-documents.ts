@@ -1,4 +1,4 @@
-import { readdir, stat } from "node:fs/promises";
+import { lstat, readdir, realpath, stat } from "node:fs/promises";
 import { join, resolve as resolvePath } from "node:path";
 
 import type { DocumentDiscoveryCandidate } from "../document-discovery/index.ts";
@@ -159,10 +159,15 @@ async function listScopedMarkdownPaths(
   scopePaths: readonly string[] | undefined,
 ): Promise<string[]> {
   const discoveredPaths = new Set<string>();
+  const visitedDirectories = new Set<string>();
   const scopedPaths = scopePaths && scopePaths.length > 0 ? scopePaths : ["."];
 
   for (const scopePath of scopedPaths) {
-    await collectMarkdownPaths(resolvePath(repoRoot, scopePath), discoveredPaths);
+    await collectMarkdownPaths(
+      resolvePath(repoRoot, scopePath),
+      discoveredPaths,
+      visitedDirectories,
+    );
   }
 
   return [...discoveredPaths].sort();
@@ -171,30 +176,95 @@ async function listScopedMarkdownPaths(
 async function collectMarkdownPaths(
   absolutePath: string,
   discoveredPaths: Set<string>,
+  visitedDirectories: Set<string>,
 ): Promise<void> {
-  const entry = await stat(absolutePath).catch(() => null);
+  const entry = await lstat(absolutePath).catch(() => null);
 
   if (entry === null) {
     throw new Error(`Scope path does not exist: ${absolutePath}`);
   }
 
+  if (entry.isSymbolicLink()) {
+    await collectSymbolicLinkMarkdownPaths(
+      absolutePath,
+      discoveredPaths,
+      visitedDirectories,
+    );
+    return;
+  }
+
   if (entry.isDirectory()) {
-    const childEntries = await readdir(absolutePath, { withFileTypes: true });
-
-    childEntries.sort((left, right) => left.name.localeCompare(right.name));
-
-    for (const childEntry of childEntries) {
-      if (childEntry.isDirectory() && skippedDirectoryNames.has(childEntry.name)) {
-        continue;
-      }
-
-      await collectMarkdownPaths(join(absolutePath, childEntry.name), discoveredPaths);
-    }
-
+    await collectDirectoryMarkdownPaths(
+      absolutePath,
+      discoveredPaths,
+      visitedDirectories,
+    );
     return;
   }
 
   if (entry.isFile() && absolutePath.toLowerCase().endsWith(".md")) {
     discoveredPaths.add(absolutePath);
+  }
+}
+
+async function collectSymbolicLinkMarkdownPaths(
+  absolutePath: string,
+  discoveredPaths: Set<string>,
+  visitedDirectories: Set<string>,
+): Promise<void> {
+  const canonicalPath = await realpath(absolutePath).catch(() => null);
+  const targetEntry = await stat(absolutePath).catch(() => null);
+
+  if (canonicalPath === null || targetEntry === null) {
+    throw new Error(`Scope path does not exist: ${absolutePath}`);
+  }
+
+  if (targetEntry.isDirectory()) {
+    await collectDirectoryMarkdownPaths(
+      absolutePath,
+      discoveredPaths,
+      visitedDirectories,
+      canonicalPath,
+    );
+    return;
+  }
+
+  if (targetEntry.isFile() && absolutePath.toLowerCase().endsWith(".md")) {
+    discoveredPaths.add(absolutePath);
+  }
+}
+
+async function collectDirectoryMarkdownPaths(
+  absolutePath: string,
+  discoveredPaths: Set<string>,
+  visitedDirectories: Set<string>,
+  canonicalPath?: string,
+): Promise<void> {
+  const directoryPath = canonicalPath ?? (await realpath(absolutePath));
+
+  // Break cycles when the same directory is reachable through a symlink alias.
+  if (visitedDirectories.has(directoryPath)) {
+    return;
+  }
+
+  visitedDirectories.add(directoryPath);
+
+  const childEntries = await readdir(absolutePath, { withFileTypes: true });
+
+  childEntries.sort((left, right) => left.name.localeCompare(right.name));
+
+  for (const childEntry of childEntries) {
+    if (
+      skippedDirectoryNames.has(childEntry.name) &&
+      (childEntry.isDirectory() || childEntry.isSymbolicLink())
+    ) {
+      continue;
+    }
+
+    await collectMarkdownPaths(
+      join(absolutePath, childEntry.name),
+      discoveredPaths,
+      visitedDirectories,
+    );
   }
 }

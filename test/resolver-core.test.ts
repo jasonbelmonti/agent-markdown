@@ -1,5 +1,7 @@
 import { expect, test } from "bun:test";
-import { resolve as resolvePath } from "node:path";
+import { mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, resolve as resolvePath } from "node:path";
 
 import {
   type DocumentDiscoveryHint,
@@ -11,6 +13,7 @@ import {
 import { prepareResolverDocument } from "../src/resolver-core/prepared-document.ts";
 
 const repoRoot = resolvePath(import.meta.dir, "..");
+const textDecoder = new TextDecoder();
 
 test("sniffDocument detects declared task documents and recommends full resolution", async () => {
   const response = await sniffDocument({
@@ -267,6 +270,58 @@ test("discoverDocuments returns deterministic summaries for declared and discove
       },
     },
   });
+});
+
+test("discoverDocuments avoids following directory symlink cycles", async () => {
+  const tempRoot = await mkdtemp(join(tmpdir(), "agent-markdown-discovery-"));
+  const fixtureMarkdown = await Bun.file(
+    resolvePath(repoRoot, "examples/valid/task/basic.task.md"),
+  ).text();
+
+  await mkdir(join(tempRoot, "nested"));
+  await writeFile(join(tempRoot, "loop.task.md"), fixtureMarkdown);
+  await symlink(tempRoot, join(tempRoot, "nested", "back"));
+
+  try {
+    const result = Bun.spawnSync({
+      cmd: [
+        process.execPath,
+        "-e",
+        `
+          import { discoverDocuments } from "./index.ts";
+
+          const result = await discoverDocuments({
+            repoRoot: ${JSON.stringify(repoRoot)},
+            scopePaths: [${JSON.stringify(tempRoot)}],
+            mode: "informational",
+          });
+
+          console.log(JSON.stringify(result));
+        `,
+      ],
+      cwd: repoRoot,
+      stdout: "pipe",
+      stderr: "pipe",
+      timeout: 2000,
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(textDecoder.decode(result.stderr)).toBe("");
+
+    const parsed = JSON.parse(textDecoder.decode(result.stdout));
+
+    expect(parsed.documents).toHaveLength(1);
+    expect(parsed.documents[0]).toMatchObject({
+      declaration: {
+        docProfile: "task/basic@v1",
+      },
+      resolved: {
+        conformance: "semantically_valid",
+      },
+    });
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
 });
 
 test("explainProfile derives a reusable summary from the loaded registry entry", async () => {
