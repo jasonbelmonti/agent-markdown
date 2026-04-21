@@ -78,8 +78,9 @@ re-exports library surfaces for tests and future consumers.
 
 `validate` resolves a Markdown document by path, loads the declared profile, and
 prints deterministic validation JSON. Exit code `0` means semantically valid,
-`1` means the document resolved but is not fully valid, and `2` is reserved for
-unexpected loader failures such as malformed frontmatter.
+`1` means the document resolved but is not fully valid, and `2` means the
+command failed before producing a validation result, including usage errors and
+thrown loader failures such as malformed frontmatter.
 
 `normalize` resolves the same path through the full pipeline and prints the
 canonical normalized JSON envelope, including declaration data, metadata, body
