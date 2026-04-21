@@ -72,6 +72,7 @@ Instance documents governed by this profile should declare:
 - `doc_spec: agent-markdown/0.1`
 - `doc_kind: task`
 - `doc_profile: task/basic@v1`
+- `title: <human-readable task title>`
 
 # Authoring guidance
 

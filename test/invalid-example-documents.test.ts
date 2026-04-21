@@ -201,6 +201,54 @@ test("ships a project fixture that is missing exactly one required section", asy
   expect(sectionContentByHeading.has("Success measures")).toBe(false);
 });
 
+test("ships a brief fixture that is missing exactly one required section", async () => {
+  const fixturePath =
+    "examples/invalid/body/missing-open-questions.brief.md";
+  const briefProfile = registry.profilesById["brief/basic@v1"];
+  const { candidate, document, resolution, sections, normalized } =
+    await loadResolvedExampleFixture(fixturePath, {
+      discoveryHints,
+      registry,
+    });
+  const sectionHeadings = sections.sections.map((section) => section.heading);
+  const sectionContentByHeading = createSectionContentMap(sections);
+  const missingRequiredSections = briefProfile.body.required_sections.filter(
+    (heading) => !sectionHeadings.includes(heading),
+  );
+
+  assertCandidateMatchesProfile(candidate, "brief/basic@v1");
+  expect(document.declaration.docSpec).toBe("agent-markdown/0.1");
+  expect(document.declaration.docKind).toBe("brief");
+  expect(document.declaration.docProfile).toBe("brief/basic@v1");
+  expect(resolution.resolved).toBe(true);
+  expect(resolution.reason).toBeNull();
+  expect(resolution.profile_id).toBe("brief/basic@v1");
+  assertValidation(normalized.validation, {
+    conformance: "recognized",
+    errors: [
+      createValidationError(
+        "required-section-missing",
+        'Required section "Open questions" is missing for profile "brief/basic@v1".',
+        'body.sections["Open questions"]',
+      ),
+    ],
+    warnings: [],
+  });
+  expect(missingRequiredSections).toEqual(["Open questions"]);
+  expect(sectionHeadings).toEqual(
+    briefProfile.body.required_sections.filter(
+      (heading) => heading !== "Open questions",
+    ),
+  );
+  assertNonemptySections(
+    sectionContentByHeading,
+    briefProfile.validation.require_nonempty_sections.filter(
+      (heading) => heading !== "Open questions",
+    ),
+  );
+  expect(sectionContentByHeading.has("Open questions")).toBe(false);
+});
+
 test("ships a task fixture that violates the checklist contract without missing sections", async () => {
   const fixturePath =
     "examples/invalid/contract/success-criteria-not-checklist.task.md";

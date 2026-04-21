@@ -65,6 +65,7 @@ Instance documents governed by this profile should declare:
 - `doc_spec: agent-markdown/0.1`
 - `doc_kind: brief`
 - `doc_profile: brief/basic@v1`
+- `title: <human-readable brief title>`
 
 # Authoring guidance
 
