@@ -1,7 +1,6 @@
 import {
   advancePersistentHtmlBlockState,
-  isPersistentHtmlBlockState,
-  readHtmlBlockStart,
+  consumeOpeningHtmlBlockLine,
   type PersistentHtmlBlockState,
 } from "./html-blocks.ts";
 import { splitMarkdownLines } from "./markdown-lines.ts";
@@ -44,12 +43,10 @@ export function collectHeadingBoundaries(markdown: string): HeadingBoundary[] {
       continue;
     }
 
-    const openingHtmlBlock = readHtmlBlockStart(line.content);
+    const openingHtmlBlock = consumeOpeningHtmlBlockLine(line.content);
 
-    if (openingHtmlBlock !== null) {
-      openHtmlBlock = isPersistentHtmlBlockState(openingHtmlBlock)
-        ? advancePersistentHtmlBlockState(line.content, openingHtmlBlock)
-        : null;
+    if (openingHtmlBlock.consumedLine) {
+      openHtmlBlock = openingHtmlBlock.openBlock;
       continue;
     }
 

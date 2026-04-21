@@ -1,8 +1,7 @@
 import {
   advancePersistentHtmlBlockState,
-  isPersistentHtmlBlockState,
-  readHtmlBlockStart,
-  type HtmlBlockState,
+  consumeOpeningHtmlBlockLine,
+  type HtmlBlockStartResult,
   type PersistentHtmlBlockState,
 } from "../markdown-body/html-blocks.ts";
 import {
@@ -69,17 +68,15 @@ export function containsMarkdownChecklistItem(markdown: string): boolean {
       continue;
     }
 
-    const openingHtmlBlock = readOpeningHtmlBlock(
+    const openingHtmlBlock = consumeOpeningHtmlBlock(
       line.content,
       lineIndentation,
       activeListIndentations,
     );
 
-    if (openingHtmlBlock !== null) {
+    if (openingHtmlBlock.consumedLine) {
       collapseNestedListIndentations(activeListIndentations, lineIndentation);
-      openHtmlBlock = isPersistentHtmlBlockState(openingHtmlBlock)
-        ? advancePersistentHtmlBlockState(line.content, openingHtmlBlock)
-        : null;
+      openHtmlBlock = openingHtmlBlock.openBlock;
       previousLineWasBlank = lineIsBlank;
       previousLineCanContinueParagraph = false;
       continue;
@@ -251,14 +248,17 @@ function isPermittedContainerIndentation(
   );
 }
 
-function readOpeningHtmlBlock(
+function consumeOpeningHtmlBlock(
   line: string,
   indentation: number,
   activeListIndentations: number[],
-): HtmlBlockState | null {
+): HtmlBlockStartResult {
   return isPermittedContainerIndentation(indentation, activeListIndentations)
-    ? readHtmlBlockStart(line, indentation)
-    : null;
+    ? consumeOpeningHtmlBlockLine(line, indentation)
+    : {
+        consumedLine: false,
+        openBlock: null,
+      };
 }
 
 function isNestedWithinListContent(
@@ -288,7 +288,7 @@ function startsBlockOutsideParagraph(
     /^ {0,3}>/u.test(line) ||
     /^ {0,3}#{1,6}(?:[ \t]+|$)/u.test(line) ||
     /^ {0,3}(?:-{3,}|_{3,}|\*{3,})(?:[ \t]*[-_*][ \t]*)*$/u.test(line) ||
-    readOpeningHtmlBlock(line, indentation, activeListIndentations) !== null
+    consumeOpeningHtmlBlock(line, indentation, activeListIndentations).consumedLine
   );
 }
 
