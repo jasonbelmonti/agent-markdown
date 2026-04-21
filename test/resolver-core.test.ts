@@ -272,6 +272,16 @@ test("discoverDocuments returns deterministic summaries for declared and discove
   });
 });
 
+test("discoverDocuments excludes profile definition markdown from results", async () => {
+  const response = await discoverDocuments({
+    repoRoot,
+    scopePaths: ["profiles"],
+    mode: "informational",
+  });
+
+  expect(response.documents).toEqual([]);
+});
+
 test("discoverDocuments avoids following directory symlink cycles", async () => {
   const tempRoot = await mkdtemp(join(tmpdir(), "agent-markdown-discovery-"));
   const fixtureMarkdown = await Bun.file(
@@ -312,6 +322,41 @@ test("discoverDocuments avoids following directory symlink cycles", async () => 
 
     expect(parsed.documents).toHaveLength(1);
     expect(parsed.documents[0]).toMatchObject({
+      declaration: {
+        docProfile: "task/basic@v1",
+      },
+      resolved: {
+        conformance: "semantically_valid",
+      },
+    });
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("discoverDocuments skips dangling symlinks without aborting the walk", async () => {
+  const tempRoot = await mkdtemp(join(tmpdir(), "agent-markdown-discovery-"));
+  const fixtureMarkdown = await Bun.file(
+    resolvePath(repoRoot, "examples/valid/task/basic.task.md"),
+  ).text();
+
+  await mkdir(join(tempRoot, "nested"));
+  await writeFile(join(tempRoot, "task.task.md"), fixtureMarkdown);
+  await symlink(
+    join(tempRoot, "missing-target"),
+    join(tempRoot, "nested", "broken-link"),
+  );
+
+  try {
+    const response = await discoverDocuments({
+      repoRoot,
+      scopePaths: [tempRoot],
+      mode: "informational",
+    });
+
+    expect(response.documents).toHaveLength(1);
+    expect(response.documents[0]).toMatchObject({
+      path: expect.stringMatching(/task\.task\.md$/u),
       declaration: {
         docProfile: "task/basic@v1",
       },

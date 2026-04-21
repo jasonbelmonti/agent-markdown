@@ -41,6 +41,11 @@ export async function discoverDocuments(
       repoRoot: context.repoRoot,
       discoveryHints: context.discoveryHints,
     });
+
+    if (isProfileSpecification(preparedDocument)) {
+      continue;
+    }
+
     const declaration = hasDeclarationIdentity(
       preparedDocument.discoveredDocument.declaration,
     )
@@ -216,7 +221,7 @@ async function collectSymbolicLinkMarkdownPaths(
   const targetEntry = await stat(absolutePath).catch(() => null);
 
   if (canonicalPath === null || targetEntry === null) {
-    throw new Error(`Scope path does not exist: ${absolutePath}`);
+    return;
   }
 
   if (targetEntry.isDirectory()) {
@@ -232,6 +237,16 @@ async function collectSymbolicLinkMarkdownPaths(
   if (targetEntry.isFile() && absolutePath.toLowerCase().endsWith(".md")) {
     discoveredPaths.add(absolutePath);
   }
+}
+
+function isProfileSpecification(
+  preparedDocument: PreparedResolverDocument,
+): boolean {
+  return (
+    preparedDocument.discoveredDocument.source.path.endsWith(".profile.md") ||
+    typeof preparedDocument.discoveredDocument.source.rawFrontmatter.profile_id ===
+      "string"
+  );
 }
 
 async function collectDirectoryMarkdownPaths(
