@@ -1,7 +1,9 @@
 import {
-  advanceHtmlBlockState,
+  advancePersistentHtmlBlockState,
+  isPersistentHtmlBlockState,
   readHtmlBlockStart,
   type HtmlBlockState,
+  type PersistentHtmlBlockState,
 } from "../markdown-body/html-blocks.ts";
 import {
   readIndentationWidth,
@@ -25,7 +27,7 @@ const listItemPattern =
 
 export function containsMarkdownChecklistItem(markdown: string): boolean {
   let openFence: FenceState | null = null;
-  let openHtmlBlock: HtmlBlockState | null = null;
+  let openHtmlBlock: PersistentHtmlBlockState | null = null;
   const activeListIndentations: number[] = [];
   let previousLineWasBlank = false;
   let previousLineCanContinueParagraph = false;
@@ -48,7 +50,7 @@ export function containsMarkdownChecklistItem(markdown: string): boolean {
       if (!lineIsBlank) {
         collapseNestedListIndentations(activeListIndentations, lineIndentation);
       }
-      openHtmlBlock = advanceHtmlBlockState(line.content, openHtmlBlock);
+      openHtmlBlock = advancePersistentHtmlBlockState(line.content, openHtmlBlock);
       previousLineWasBlank = lineIsBlank;
       previousLineCanContinueParagraph = false;
       continue;
@@ -75,7 +77,9 @@ export function containsMarkdownChecklistItem(markdown: string): boolean {
 
     if (openingHtmlBlock !== null) {
       collapseNestedListIndentations(activeListIndentations, lineIndentation);
-      openHtmlBlock = advanceHtmlBlockState(line.content, openingHtmlBlock);
+      openHtmlBlock = isPersistentHtmlBlockState(openingHtmlBlock)
+        ? advancePersistentHtmlBlockState(line.content, openingHtmlBlock)
+        : null;
       previousLineWasBlank = lineIsBlank;
       previousLineCanContinueParagraph = false;
       continue;

@@ -1,7 +1,8 @@
 import {
-  advanceHtmlBlockState,
+  advancePersistentHtmlBlockState,
+  isPersistentHtmlBlockState,
   readHtmlBlockStart,
-  type HtmlBlockState,
+  type PersistentHtmlBlockState,
 } from "./html-blocks.ts";
 import { splitMarkdownLines } from "./markdown-lines.ts";
 
@@ -20,7 +21,7 @@ interface FenceState {
 export function collectHeadingBoundaries(markdown: string): HeadingBoundary[] {
   const headings: HeadingBoundary[] = [];
   let openFence: FenceState | null = null;
-  let openHtmlBlock: HtmlBlockState | null = null;
+  let openHtmlBlock: PersistentHtmlBlockState | null = null;
 
   for (const line of splitMarkdownLines(markdown)) {
     if (openFence !== null) {
@@ -32,7 +33,7 @@ export function collectHeadingBoundaries(markdown: string): HeadingBoundary[] {
     }
 
     if (openHtmlBlock !== null) {
-      openHtmlBlock = advanceHtmlBlockState(line.content, openHtmlBlock);
+      openHtmlBlock = advancePersistentHtmlBlockState(line.content, openHtmlBlock);
       continue;
     }
 
@@ -46,7 +47,9 @@ export function collectHeadingBoundaries(markdown: string): HeadingBoundary[] {
     const openingHtmlBlock = readHtmlBlockStart(line.content);
 
     if (openingHtmlBlock !== null) {
-      openHtmlBlock = advanceHtmlBlockState(line.content, openingHtmlBlock);
+      openHtmlBlock = isPersistentHtmlBlockState(openingHtmlBlock)
+        ? advancePersistentHtmlBlockState(line.content, openingHtmlBlock)
+        : null;
       continue;
     }
 

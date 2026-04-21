@@ -34,6 +34,10 @@ export type HtmlBlockState =
       kind: "single-line-structural";
       structuralKind: HtmlSingleLineStructuralKind;
     };
+export type PersistentHtmlBlockState = Extract<
+  HtmlBlockState,
+  { kind: "matching-tag-block" | "terminator-block" }
+>;
 
 interface TerminatorBlockDefinition {
   blockKind: HtmlTerminatorBlockKind;
@@ -225,6 +229,26 @@ export function advanceHtmlBlockState(
     case "matching-tag-block":
       return containsClosingTag(line, state.tagName) ? null : state;
   }
+}
+
+export function isPersistentHtmlBlockState(
+  state: HtmlBlockState,
+): state is PersistentHtmlBlockState {
+  return (
+    state.kind === "matching-tag-block" ||
+    state.kind === "terminator-block"
+  );
+}
+
+export function advancePersistentHtmlBlockState(
+  line: string,
+  state: PersistentHtmlBlockState,
+): PersistentHtmlBlockState | null {
+  const nextState = advanceHtmlBlockState(line, state);
+
+  return nextState !== null && isPersistentHtmlBlockState(nextState)
+    ? nextState
+    : null;
 }
 
 function containsClosingTag(line: string, tagName: string): boolean {
