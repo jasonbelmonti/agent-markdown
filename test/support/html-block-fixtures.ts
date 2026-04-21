@@ -26,6 +26,12 @@ export const htmlBlockFixtureWrappers: HtmlBlockFixtureWrapper[] = [
     end: "</details>",
   },
   {
+    label: "raw HTML blocks with inline summary",
+    fixtureSlug: "raw-html-blocks-inline-summary",
+    start: "<details><summary>Summary</summary>",
+    end: "</details>",
+  },
+  {
     label: "generic raw HTML wrappers",
     fixtureSlug: "generic-raw-html-wrappers",
     start: "<custom-tag>",

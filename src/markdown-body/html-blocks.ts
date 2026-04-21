@@ -2,11 +2,17 @@ import { readLineIndentation } from "./markdown-lines.ts";
 
 type RawHtmlTagName = "pre" | "script" | "style" | "textarea";
 
+interface OpeningHtmlTag {
+  tagName: string;
+  selfClosing: boolean;
+}
+
 export type HtmlBlockState =
   | { kind: "comment" }
   | { kind: "cdata" }
   | { kind: "declaration" }
   | { kind: "processing-instruction" }
+  | { kind: "single-line-tag" }
   | {
       kind: "raw-tag";
       tagName: RawHtmlTagName;
@@ -37,8 +43,8 @@ const processingInstructionHtmlBlockStartPattern = /^<\?\w?/u;
 const cdataHtmlBlockStartPattern = /^<!\[CDATA\[/u;
 const declarationHtmlBlockStartPattern = /^<![A-Z]/iu;
 const rawHtmlTagPattern = /^<(pre|script|style|textarea)\b/iu;
-const openingHtmlTagPattern = /^<([A-Za-z][A-Za-z0-9-]*)(?:\s[^>]*)?>\s*$/u;
-const selfClosingHtmlTagPattern = /\/>\s*$/u;
+const openingHtmlTagPattern =
+  /^<([A-Za-z][A-Za-z0-9-]*)(?:\s[^>]*)?\s*(\/?)>/iu;
 
 export function readHtmlBlockStart(
   line: string,
@@ -75,19 +81,20 @@ export function readHtmlBlockStart(
     };
   }
 
-  const openingTagName = readOpeningHtmlTagName(blockContent);
+  const openingTag = readOpeningHtmlTag(blockContent);
 
-  if (
-    openingTagName !== null &&
-    !htmlVoidTagNames.has(openingTagName)
-  ) {
-    return {
-      kind: "wrapper-tag",
-      tagName: openingTagName,
-    };
+  if (openingTag === null) {
+    return null;
   }
 
-  return null;
+  if (openingTag.selfClosing || htmlVoidTagNames.has(openingTag.tagName)) {
+    return { kind: "single-line-tag" };
+  }
+
+  return {
+    kind: "wrapper-tag",
+    tagName: openingTag.tagName,
+  };
 }
 
 function readHtmlBlockContent(
@@ -97,18 +104,23 @@ function readHtmlBlockContent(
   return readLineIndentation(line) <= maximumIndentation ? line.trimStart() : null;
 }
 
-function readOpeningHtmlTagName(blockContent: string): string | null {
-  if (selfClosingHtmlTagPattern.test(blockContent)) {
+function readOpeningHtmlTag(blockContent: string): OpeningHtmlTag | null {
+  const matchedTag = blockContent.match(openingHtmlTagPattern);
+
+  if (matchedTag === null) {
     return null;
   }
 
-  const tagName = blockContent.match(openingHtmlTagPattern)?.[1]?.toLowerCase();
+  const tagName = matchedTag[1]?.toLowerCase();
 
   if (tagName === undefined) {
     return null;
   }
 
-  return tagName;
+  return {
+    tagName,
+    selfClosing: matchedTag[2] === "/",
+  };
 }
 
 function readRawHtmlTagName(blockContent: string): RawHtmlTagName | null {
@@ -138,6 +150,8 @@ export function advanceHtmlBlockState(
       return line.includes(">") ? null : state;
     case "processing-instruction":
       return line.includes("?>") ? null : state;
+    case "single-line-tag":
+      return null;
     case "raw-tag":
     case "wrapper-tag":
       return containsClosingTag(line, state.tagName) ? null : state;
