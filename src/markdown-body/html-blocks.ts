@@ -1,6 +1,18 @@
 import { readLineIndentation } from "./markdown-lines.ts";
 
 type RawHtmlTagName = "pre" | "script" | "style" | "textarea";
+type HtmlTerminatorBlockKind =
+  | "comment"
+  | "cdata"
+  | "declaration"
+  | "processing-instruction";
+type HtmlMatchingTagBlockKind = "raw-tag" | "wrapper-tag";
+type HtmlSingleLineStructuralKind =
+  | "closing-tag"
+  | "inline-matching-tag"
+  | "self-closing-tag"
+  | "void-tag";
+type HtmlTerminator = "-->" | "]]>" | ">" | "?>";
 
 interface OpeningHtmlTag {
   tagName: string;
@@ -8,19 +20,26 @@ interface OpeningHtmlTag {
 }
 
 export type HtmlBlockState =
-  | { kind: "comment" }
-  | { kind: "cdata" }
-  | { kind: "declaration" }
-  | { kind: "processing-instruction" }
-  | { kind: "single-line-tag" }
   | {
-      kind: "raw-tag";
-      tagName: RawHtmlTagName;
+      kind: "matching-tag-block";
+      blockKind: HtmlMatchingTagBlockKind;
+      tagName: string;
     }
   | {
-      kind: "wrapper-tag";
-      tagName: string;
+      kind: "terminator-block";
+      blockKind: HtmlTerminatorBlockKind;
+      terminator: HtmlTerminator;
+    }
+  | {
+      kind: "single-line-structural";
+      structuralKind: HtmlSingleLineStructuralKind;
     };
+
+interface TerminatorBlockDefinition {
+  blockKind: HtmlTerminatorBlockKind;
+  startPattern: RegExp;
+  terminator: HtmlTerminator;
+}
 
 const htmlVoidTagNames = new Set([
   "area",
@@ -38,10 +57,28 @@ const htmlVoidTagNames = new Set([
   "track",
   "wbr",
 ]);
-const commentHtmlBlockStartPattern = /^<!--/u;
-const processingInstructionHtmlBlockStartPattern = /^<\?\w?/u;
-const cdataHtmlBlockStartPattern = /^<!\[CDATA\[/u;
-const declarationHtmlBlockStartPattern = /^<![A-Z]/iu;
+const terminatorBlockDefinitions: TerminatorBlockDefinition[] = [
+  {
+    blockKind: "comment",
+    startPattern: /^<!--/u,
+    terminator: "-->",
+  },
+  {
+    blockKind: "processing-instruction",
+    startPattern: /^<\?\w?/u,
+    terminator: "?>",
+  },
+  {
+    blockKind: "cdata",
+    startPattern: /^<!\[CDATA\[/u,
+    terminator: "]]>",
+  },
+  {
+    blockKind: "declaration",
+    startPattern: /^<![A-Z]/iu,
+    terminator: ">",
+  },
+];
 const closingHtmlTagPattern = /^<\/([A-Za-z][A-Za-z0-9-]*)\s*>\s*$/iu;
 const rawHtmlTagPattern = /^<(pre|script|style|textarea)\b/iu;
 const openingHtmlTagPattern =
@@ -57,33 +94,23 @@ export function readHtmlBlockStart(
     return null;
   }
 
-  if (commentHtmlBlockStartPattern.test(blockContent)) {
-    return { kind: "comment" };
+  const terminatorBlock = readTerminatorBlockStart(blockContent);
+
+  if (terminatorBlock !== null) {
+    return terminatorBlock;
   }
 
-  if (processingInstructionHtmlBlockStartPattern.test(blockContent)) {
-    return { kind: "processing-instruction" };
-  }
-
-  if (cdataHtmlBlockStartPattern.test(blockContent)) {
-    return { kind: "cdata" };
-  }
-
-  if (declarationHtmlBlockStartPattern.test(blockContent)) {
-    return { kind: "declaration" };
-  }
-
-  if (closingHtmlTagPattern.test(blockContent)) {
-    return { kind: "single-line-tag" };
+  if (readClosingHtmlTagName(blockContent) !== null) {
+    return {
+      kind: "single-line-structural",
+      structuralKind: "closing-tag",
+    };
   }
 
   const rawTagName = readRawHtmlTagName(blockContent);
 
   if (rawTagName !== null) {
-    return {
-      kind: "raw-tag",
-      tagName: rawTagName,
-    };
+    return readMatchingTagBlock(blockContent, "raw-tag", rawTagName);
   }
 
   const openingTag = readOpeningHtmlTag(blockContent);
@@ -92,21 +119,65 @@ export function readHtmlBlockStart(
     return null;
   }
 
-  if (openingTag.selfClosing || htmlVoidTagNames.has(openingTag.tagName)) {
-    return { kind: "single-line-tag" };
+  if (openingTag.selfClosing) {
+    return {
+      kind: "single-line-structural",
+      structuralKind: "self-closing-tag",
+    };
   }
 
-  return {
-    kind: "wrapper-tag",
-    tagName: openingTag.tagName,
-  };
+  if (htmlVoidTagNames.has(openingTag.tagName)) {
+    return {
+      kind: "single-line-structural",
+      structuralKind: "void-tag",
+    };
+  }
+
+  return readMatchingTagBlock(blockContent, "wrapper-tag", openingTag.tagName);
+}
+
+function readTerminatorBlockStart(blockContent: string): HtmlBlockState | null {
+  for (const definition of terminatorBlockDefinitions) {
+    if (definition.startPattern.test(blockContent)) {
+      return {
+        kind: "terminator-block",
+        blockKind: definition.blockKind,
+        terminator: definition.terminator,
+      };
+    }
+  }
+
+  return null;
+}
+
+function readMatchingTagBlock(
+  blockContent: string,
+  blockKind: HtmlMatchingTagBlockKind,
+  tagName: string,
+): HtmlBlockState {
+  return containsClosingTag(blockContent, tagName)
+    ? {
+        kind: "single-line-structural",
+        structuralKind: "inline-matching-tag",
+      }
+    : {
+        kind: "matching-tag-block",
+        blockKind,
+        tagName,
+      };
+}
+
+function readClosingHtmlTagName(blockContent: string): string | null {
+  return closingHtmlTagPattern.exec(blockContent)?.[1]?.toLowerCase() ?? null;
 }
 
 function readHtmlBlockContent(
   line: string,
   maximumIndentation: number,
 ): string | null {
-  return readLineIndentation(line) <= maximumIndentation ? line.trimStart() : null;
+  return readLineIndentation(line) <= maximumIndentation
+    ? line.trimStart()
+    : null;
 }
 
 function readOpeningHtmlTag(blockContent: string): OpeningHtmlTag | null {
@@ -124,7 +195,7 @@ function readOpeningHtmlTag(blockContent: string): OpeningHtmlTag | null {
 
   return {
     tagName,
-    selfClosing: matchedTag[2] === "/",
+    selfClosing: matchedTag[0].trimEnd().endsWith("/>"),
   };
 }
 
@@ -147,18 +218,11 @@ export function advanceHtmlBlockState(
   state: HtmlBlockState,
 ): HtmlBlockState | null {
   switch (state.kind) {
-    case "comment":
-      return line.includes("-->") ? null : state;
-    case "cdata":
-      return line.includes("]]>") ? null : state;
-    case "declaration":
-      return line.includes(">") ? null : state;
-    case "processing-instruction":
-      return line.includes("?>") ? null : state;
-    case "single-line-tag":
+    case "single-line-structural":
       return null;
-    case "raw-tag":
-    case "wrapper-tag":
+    case "terminator-block":
+      return line.includes(state.terminator) ? null : state;
+    case "matching-tag-block":
       return containsClosingTag(line, state.tagName) ? null : state;
   }
 }
