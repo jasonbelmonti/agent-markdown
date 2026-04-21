@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 
 import type {
+  DiscoverRequest,
   DiscoverResponse,
   DiscoveredDocumentResolvedSummary,
   ExplainProfileResponse,
@@ -249,6 +250,11 @@ test("requires resolve responses to embed the normalized document and runtime wr
 });
 
 test("keeps discovery responses summary-only instead of embedding full normalized documents", () => {
+  const request = {
+    scopePaths: ["examples/valid"],
+    mode: "informational",
+  } satisfies DiscoverRequest;
+
   const response = {
     documents: [
       {
@@ -266,6 +272,7 @@ test("keeps discovery responses summary-only instead of embedding full normalize
     ],
   } satisfies DiscoverResponse;
 
+  expect(request.repoRoot).toBeUndefined();
   expect(response.documents).toHaveLength(2);
   expect(response.documents[0]?.resolved?.profile.profileId).toBe(taskProfileId);
 });

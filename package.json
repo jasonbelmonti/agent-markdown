@@ -5,6 +5,7 @@
   "private": true,
   "scripts": {
     "acceptance:cli": "bun test ./test/cli-acceptance.test.ts",
+    "mcp": "bun run ./src/mcp-server/stdio.ts",
     "normalize": "bun run ./src/cli/normalize.ts",
     "validate": "bun run ./src/cli/validate.ts"
   },
@@ -15,6 +16,9 @@
     "typescript": "^5"
   },
   "dependencies": {
-    "yaml": "^2.8.3"
+    "@cfworker/json-schema": "^4.1.1",
+    "@modelcontextprotocol/server": "^2.0.0-alpha.2",
+    "yaml": "^2.8.3",
+    "zod": "^4.3.6"
   }
 }

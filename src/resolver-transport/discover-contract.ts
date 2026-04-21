@@ -9,7 +9,7 @@ import type {
 } from "./runtime-metadata.ts";
 
 export interface DiscoverRequest {
-  repoRoot: string;
+  repoRoot?: string;
   scopePaths?: string[];
   docKinds?: string[];
   profileIds?: string[];
