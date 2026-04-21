@@ -197,6 +197,125 @@ test("resolveDocument keeps discovery fallback documents below semantic trust", 
   });
 });
 
+test("resolveDocument keeps unknown declared profiles below semantic trust", async () => {
+  const response = await resolveDocument({
+    input: {
+      kind: "path",
+      path: "examples/invalid/profile/unknown-profile.task.md",
+    },
+    repoRoot,
+    mode: "informational",
+  });
+
+  expect(response.normalizedDocument.validation.conformance).toBe("candidate");
+  expect(response.profileResolution).toMatchObject({
+    resolved: false,
+    profile_id: null,
+    reason: "unknown_profile",
+  });
+  expect(response.resolution).toEqual({
+    mode: "informational",
+    source: "declaration",
+    requestedProfileId: null,
+    effectiveProfileId: "task/experimental@v9",
+  });
+  expect(response.trust).toEqual({
+    mayReference: true,
+    mayPlanFrom: false,
+    mayExecuteFrom: false,
+    requiresUserConfirmation: false,
+  });
+  expect(response.guidance).toEqual({
+    codes: ["treat_as_plain_markdown"],
+  });
+});
+
+test("resolveDocument reports structural contract failures without granting planning trust", async () => {
+  const response = await resolveDocument({
+    input: {
+      kind: "path",
+      path: "examples/invalid/body/missing-success-measures.project.md",
+    },
+    repoRoot,
+    mode: "assistive",
+  });
+
+  expect(response.normalizedDocument.validation).toEqual({
+    conformance: "recognized",
+    errors: [
+      {
+        code: "required-section-missing",
+        severity: "error",
+        message:
+          'Required section "Success measures" is missing for profile "project/basic@v1".',
+        path: 'body.sections["Success measures"]',
+      },
+    ],
+    warnings: [],
+  });
+  expect(response.profileResolution).toMatchObject({
+    resolved: true,
+    profile_id: "project/basic@v1",
+    reason: null,
+  });
+  expect(response.trust).toEqual({
+    mayReference: true,
+    mayPlanFrom: false,
+    mayExecuteFrom: false,
+    requiresUserConfirmation: false,
+  });
+  expect(response.guidance).toEqual({
+    codes: ["show_validation_warning"],
+  });
+});
+
+test("resolveDocument degrades semantically invalid documents to warning-only trust", async () => {
+  const response = await resolveDocument({
+    input: {
+      kind: "path",
+      path: "examples/invalid/semantic/duplicate-objective.task.md",
+    },
+    repoRoot,
+    mode: "assistive",
+  });
+
+  expect(response.normalizedDocument.validation).toEqual({
+    conformance: "structurally_valid",
+    errors: [
+      {
+        code: "normative-section-ambiguous",
+        severity: "error",
+        message:
+          'Normative section "Objective" must appear at most once at the top level for profile "task/basic@v1".',
+        path: 'body.sections["Objective"]',
+      },
+    ],
+    warnings: [
+      {
+        code: "degraded-affordance",
+        severity: "warning",
+        message:
+          'Affordances remain degraded until semantic validation passes for profile "task/basic@v1".',
+        path: "affordances.actionability",
+      },
+    ],
+  });
+  expect(response.profileResolution).toMatchObject({
+    resolved: true,
+    profile_id: "task/basic@v1",
+    reason: null,
+  });
+  expect(response.trust).toEqual({
+    mayReference: true,
+    mayPlanFrom: false,
+    mayExecuteFrom: false,
+    requiresUserConfirmation: false,
+  });
+  expect(response.guidance).toEqual({
+    codes: ["show_validation_warning"],
+  });
+});
+
 test("discoverDocuments returns deterministic summaries for declared and discovery-only matches", async () => {
   const response = await discoverDocuments({
     repoRoot,
