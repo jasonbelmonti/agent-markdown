@@ -250,6 +250,10 @@ Documents must be processed in stages.
 Tools may scan repositories for Markdown files that match known discovery
 patterns such as preferred filenames, globs, or explicit paths.
 
+Repository-scoped discovery must remain bounded to the configured `repoRoot`.
+Explicit scope paths must resolve within that repository root, and symlink
+targets that escape the repository must not be traversed.
+
 At this stage the document is only a candidate.
 
 ### Stage 2: Declaration read
@@ -261,9 +265,16 @@ supported values for:
 - `doc_kind`
 - `doc_profile`
 
+`doc_spec` or `doc_profile` is sufficient to trigger declaration-first
+resolution. `doc_kind` alone is not.
+
 ### Stage 3: Profile lookup
 
 Tools resolve the declared profile through the profile registry.
+
+When discovery results are filtered by kind or profile, declared values remain
+authoritative. Discovery hints may assist fallback matching for undeclared
+documents, but they must not override declared semantics.
 
 If profile resolution fails, the document may still be surfaced as a discovered
 candidate, but it must not be treated as semantically valid.

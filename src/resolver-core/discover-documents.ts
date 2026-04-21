@@ -1,6 +1,3 @@
-import { lstat, readdir, realpath, stat } from "node:fs/promises";
-import { join, resolve as resolvePath } from "node:path";
-
 import type { DocumentDiscoveryCandidate } from "../document-discovery/index.ts";
 import type {
   DiscoverRequest,
@@ -8,6 +5,7 @@ import type {
   DiscoverResponseDocument,
   DiscoveredDocumentResolvedSummary,
 } from "../resolver-transport/index.ts";
+import { isMvpProfileId } from "../profile-registry/profile-identity.ts";
 
 import {
   loadResolverContext,
@@ -17,10 +15,15 @@ import {
   prepareResolverDocument,
   type PreparedResolverDocument,
 } from "./prepared-document.ts";
-import { hasDeclarationIdentity } from "./declaration-identity.ts";
+import {
+  hasDeclarationIdentity,
+  hasDeclaredSemantics,
+} from "./declaration-identity.ts";
+import { listScopedMarkdownPaths } from "./discover-document-paths.ts";
 import { resolvePreparedDocument } from "./resolve-document.ts";
 
-const skippedDirectoryNames = new Set([".git", "node_modules"]);
+type ProfilesById = ResolverContext["registry"]["profilesById"];
+type DiscoverDeclaration = DiscoverResponseDocument["declaration"];
 
 export async function discoverDocuments(
   request: DiscoverRequest,
@@ -46,24 +49,27 @@ export async function discoverDocuments(
       continue;
     }
 
-    const declaration = hasDeclarationIdentity(
-      preparedDocument.discoveredDocument.declaration,
-    )
-      ? preparedDocument.discoveredDocument.declaration
-      : null;
-
-    if (!shouldIncludeDocument(preparedDocument.candidate, declaration)) {
-      continue;
-    }
+    const declaration = toDiscoverDeclaration(preparedDocument);
+    const matchesFilters = matchesDiscoverFilters(
+      context.registry.profilesById,
+      preparedDocument.candidate,
+      declaration,
+      request,
+    );
 
     if (
-      !matchesDiscoverFilters(
+      !shouldIncludeDocument(
         context.registry.profilesById,
         preparedDocument.candidate,
         declaration,
         request,
+        matchesFilters,
       )
     ) {
+      continue;
+    }
+
+    if (!matchesFilters) {
       continue;
     }
 
@@ -133,132 +139,165 @@ async function createResolvedSummary(
 }
 
 function shouldIncludeDocument(
+  profilesById: ProfilesById,
   candidate: DocumentDiscoveryCandidate,
-  declaration: DiscoverResponseDocument["declaration"],
+  declaration: DiscoverDeclaration,
+  request: DiscoverRequest,
+  matchesFilters: boolean,
 ): boolean {
-  return declaration !== null || candidate.discoveryMatches.length > 0;
+  if (
+    (declaration !== null && hasDeclarationIdentity(declaration)) ||
+    candidate.discoveryMatches.length > 0
+  ) {
+    return true;
+  }
+
+  if (!matchesFilters || declaration === null || !hasDiscoverFilters(request)) {
+    return false;
+  }
+
+  return matchesDeclaredFilters(profilesById, candidate, declaration, request);
+}
+
+function toDiscoverDeclaration(
+  preparedDocument: PreparedResolverDocument,
+): DiscoverDeclaration {
+  const declaration = preparedDocument.discoveredDocument.declaration;
+
+  return hasDeclaredSemantics(declaration) ? declaration : null;
 }
 
 function matchesDiscoverFilters(
-  profilesById: ResolverContext["registry"]["profilesById"],
+  profilesById: ProfilesById,
   candidate: DocumentDiscoveryCandidate,
-  declaration: DiscoverResponseDocument["declaration"],
+  declaration: DiscoverDeclaration,
   request: DiscoverRequest,
 ): boolean {
-  if (request.docKinds && request.docKinds.length > 0) {
-    const matchedDocKinds = new Set<string>();
+  return (
+    matchesRequestedDocKinds(
+      profilesById,
+      candidate,
+      declaration,
+      request.docKinds,
+      true,
+    ) &&
+    matchesRequestedProfileIds(
+      profilesById,
+      candidate,
+      declaration,
+      request.profileIds,
+      true,
+    )
+  );
+}
 
-    if (typeof declaration?.docKind === "string") {
-      matchedDocKinds.add(declaration.docKind);
-    }
+function matchesDeclaredFilters(
+  profilesById: ProfilesById,
+  candidate: DocumentDiscoveryCandidate,
+  declaration: DiscoverDeclaration,
+  request: DiscoverRequest,
+): boolean {
+  return (
+    matchesRequestedDocKinds(
+      profilesById,
+      candidate,
+      declaration,
+      request.docKinds,
+      false,
+    ) &&
+    matchesRequestedProfileIds(
+      profilesById,
+      candidate,
+      declaration,
+      request.profileIds,
+      false,
+    )
+  );
+}
 
-    for (const hint of candidate.matchedHints) {
-      const profile = profilesById[hint.origin.profileId];
-      matchedDocKinds.add(profile.doc_kind);
-    }
+function matchesRequestedDocKinds(
+  profilesById: ProfilesById,
+  candidate: DocumentDiscoveryCandidate,
+  declaration: DiscoverDeclaration,
+  requestedDocKinds: readonly string[] | undefined,
+  allowHintFallback: boolean,
+): boolean {
+  if (!requestedDocKinds || requestedDocKinds.length === 0) {
+    return true;
+  }
 
-    if (!request.docKinds.some((docKind) => matchedDocKinds.has(docKind))) {
+  const declaredDocKind = getDeclaredDocKind(profilesById, declaration);
+
+  if (declaredDocKind !== null) {
+    return requestedDocKinds.includes(declaredDocKind);
+  }
+
+  if (!allowHintFallback) {
+    return false;
+  }
+
+  return candidate.matchedHints.some((hint) =>
+    requestedDocKinds.includes(profilesById[hint.origin.profileId].doc_kind),
+  );
+}
+
+function matchesRequestedProfileIds(
+  profilesById: ProfilesById,
+  candidate: DocumentDiscoveryCandidate,
+  declaration: DiscoverDeclaration,
+  requestedProfileIds: readonly string[] | undefined,
+  allowHintFallback: boolean,
+): boolean {
+  if (!requestedProfileIds || requestedProfileIds.length === 0) {
+    return true;
+  }
+
+  if (typeof declaration?.docProfile === "string") {
+    return requestedProfileIds.includes(declaration.docProfile);
+  }
+
+  if (typeof declaration?.docKind === "string") {
+    if (!allowHintFallback) {
       return false;
     }
+
+    return candidate.matchedHints.some((hint) =>
+      requestedProfileIds.includes(hint.origin.profileId) &&
+      profilesById[hint.origin.profileId].doc_kind === declaration.docKind,
+    );
   }
 
-  if (request.profileIds && request.profileIds.length > 0) {
-    const matchedProfileIds = new Set<string>();
-
-    if (typeof declaration?.docProfile === "string") {
-      matchedProfileIds.add(declaration.docProfile);
-    }
-
-    for (const hint of candidate.matchedHints) {
-      matchedProfileIds.add(hint.origin.profileId);
-    }
-
-    if (!request.profileIds.some((profileId) => matchedProfileIds.has(profileId))) {
-      return false;
-    }
+  if (!allowHintFallback) {
+    return false;
   }
 
-  return true;
+  return candidate.matchedHints.some((hint) =>
+    requestedProfileIds.includes(hint.origin.profileId),
+  );
 }
 
-async function listScopedMarkdownPaths(
-  repoRoot: string,
-  scopePaths: readonly string[] | undefined,
-): Promise<string[]> {
-  const discoveredPaths = new Set<string>();
-  const visitedDirectories = new Set<string>();
-  const scopedPaths = scopePaths && scopePaths.length > 0 ? scopePaths : ["."];
-
-  for (const scopePath of scopedPaths) {
-    await collectMarkdownPaths(
-      resolvePath(repoRoot, scopePath),
-      discoveredPaths,
-      visitedDirectories,
-    );
+function getDeclaredDocKind(
+  profilesById: ProfilesById,
+  declaration: DiscoverDeclaration,
+): string | null {
+  if (typeof declaration?.docKind === "string") {
+    return declaration.docKind;
   }
 
-  return [...discoveredPaths].sort();
+  if (
+    isMvpProfileId(declaration?.docProfile)
+  ) {
+    return profilesById[declaration.docProfile].doc_kind;
+  }
+
+  return null;
 }
 
-async function collectMarkdownPaths(
-  absolutePath: string,
-  discoveredPaths: Set<string>,
-  visitedDirectories: Set<string>,
-): Promise<void> {
-  const entry = await lstat(absolutePath).catch(() => null);
-
-  if (entry === null) {
-    throw new Error(`Scope path does not exist: ${absolutePath}`);
-  }
-
-  if (entry.isSymbolicLink()) {
-    await collectSymbolicLinkMarkdownPaths(
-      absolutePath,
-      discoveredPaths,
-      visitedDirectories,
-    );
-    return;
-  }
-
-  if (entry.isDirectory()) {
-    await collectDirectoryMarkdownPaths(
-      absolutePath,
-      discoveredPaths,
-      visitedDirectories,
-    );
-    return;
-  }
-
-  if (entry.isFile() && absolutePath.toLowerCase().endsWith(".md")) {
-    discoveredPaths.add(absolutePath);
-  }
-}
-
-async function collectSymbolicLinkMarkdownPaths(
-  absolutePath: string,
-  discoveredPaths: Set<string>,
-  visitedDirectories: Set<string>,
-): Promise<void> {
-  const canonicalPath = await realpath(absolutePath).catch(() => null);
-  const targetEntry = await stat(absolutePath).catch(() => null);
-
-  if (canonicalPath === null || targetEntry === null) {
-    return;
-  }
-
-  if (targetEntry.isDirectory()) {
-    await collectDirectoryMarkdownPaths(
-      absolutePath,
-      discoveredPaths,
-      visitedDirectories,
-      canonicalPath,
-    );
-    return;
-  }
-
-  if (targetEntry.isFile() && absolutePath.toLowerCase().endsWith(".md")) {
-    discoveredPaths.add(absolutePath);
-  }
+function hasDiscoverFilters(request: DiscoverRequest): boolean {
+  return Boolean(
+    (request.docKinds && request.docKinds.length > 0) ||
+      (request.profileIds && request.profileIds.length > 0),
+  );
 }
 
 function isProfileSpecification(
@@ -276,39 +315,4 @@ function isMalformedFrontmatterError(error: unknown): boolean {
     error.message.includes("has malformed YAML frontmatter") ||
     error.message.includes("frontmatter must parse to a mapping")
   );
-}
-
-async function collectDirectoryMarkdownPaths(
-  absolutePath: string,
-  discoveredPaths: Set<string>,
-  visitedDirectories: Set<string>,
-  canonicalPath?: string,
-): Promise<void> {
-  const directoryPath = canonicalPath ?? (await realpath(absolutePath));
-
-  // Break cycles when the same directory is reachable through a symlink alias.
-  if (visitedDirectories.has(directoryPath)) {
-    return;
-  }
-
-  visitedDirectories.add(directoryPath);
-
-  const childEntries = await readdir(absolutePath, { withFileTypes: true });
-
-  childEntries.sort((left, right) => left.name.localeCompare(right.name));
-
-  for (const childEntry of childEntries) {
-    if (
-      skippedDirectoryNames.has(childEntry.name) &&
-      (childEntry.isDirectory() || childEntry.isSymbolicLink())
-    ) {
-      continue;
-    }
-
-    await collectMarkdownPaths(
-      join(absolutePath, childEntry.name),
-      discoveredPaths,
-      visitedDirectories,
-    );
-  }
 }
