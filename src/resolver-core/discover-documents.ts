@@ -173,20 +173,22 @@ function matchesDiscoverFilters(
   declaration: DiscoverDeclaration,
   request: DiscoverRequest,
 ): boolean {
+  const allowHintFallback = shouldAllowHintFallback(declaration);
+
   return (
     matchesRequestedDocKinds(
       profilesById,
       candidate,
       declaration,
       request.docKinds,
-      true,
+      allowHintFallback,
     ) &&
     matchesRequestedProfileIds(
       profilesById,
       candidate,
       declaration,
       request.profileIds,
-      true,
+      allowHintFallback,
     )
   );
 }
@@ -274,6 +276,12 @@ function matchesRequestedProfileIds(
   return candidate.matchedHints.some((hint) =>
     requestedProfileIds.includes(hint.origin.profileId),
   );
+}
+
+function shouldAllowHintFallback(
+  declaration: DiscoverDeclaration,
+): boolean {
+  return declaration === null || !hasDeclarationIdentity(declaration);
 }
 
 function getDeclaredDocKind(

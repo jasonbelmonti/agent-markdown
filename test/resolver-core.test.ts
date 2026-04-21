@@ -672,6 +672,57 @@ test("discoverDocuments derives docKinds from declared profiles before consideri
   }
 });
 
+test("discoverDocuments does not let doc_spec-only declarations satisfy hint-based filters", async () => {
+  const tempRoot = await createRepoTempDir();
+  const scopePath = toRepoScopePath(tempRoot);
+
+  await writeFile(
+    join(tempRoot, "TASK.md"),
+    [
+      "---",
+      "doc_spec: agent-markdown/0.1",
+      'title: "Declared spec only"',
+      "---",
+      "# Notes",
+      "",
+    ].join("\n"),
+  );
+
+  try {
+    const unfiltered = await discoverDocuments({
+      repoRoot,
+      scopePaths: [scopePath],
+      mode: "informational",
+    });
+    const filteredByTaskKind = await discoverDocuments({
+      repoRoot,
+      scopePaths: [scopePath],
+      docKinds: ["task"],
+      mode: "informational",
+    });
+    const filteredByTaskProfile = await discoverDocuments({
+      repoRoot,
+      scopePaths: [scopePath],
+      profileIds: ["task/basic@v1"],
+      mode: "informational",
+    });
+
+    expect(unfiltered.documents).toHaveLength(1);
+    expect(unfiltered.documents[0]).toMatchObject({
+      declaration: {
+        docSpec: "agent-markdown/0.1",
+        docKind: null,
+        docProfile: null,
+      },
+      discoveryMatches: ["TASK.md"],
+    });
+    expect(filteredByTaskKind.documents).toEqual([]);
+    expect(filteredByTaskProfile.documents).toEqual([]);
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("discoverDocuments does not let conflicting profile filters override a declared doc_kind", async () => {
   const tempRoot = await createRepoTempDir();
   const scopePath = toRepoScopePath(tempRoot);
@@ -717,6 +768,61 @@ test("discoverDocuments does not let conflicting profile filters override a decl
     });
     expect(filteredByTaskProfile.documents).toEqual([]);
     expect(filteredByProjectKind.documents).toHaveLength(1);
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("discoverDocuments does not let unknown declared profiles satisfy conflicting hint filters", async () => {
+  const tempRoot = await createRepoTempDir();
+  const scopePath = toRepoScopePath(tempRoot);
+
+  await writeFile(
+    join(tempRoot, "PROJECT.md"),
+    [
+      "---",
+      "doc_profile: task/experimental@v9",
+      'title: "Unknown declared profile"',
+      "---",
+      "# Notes",
+      "",
+    ].join("\n"),
+  );
+
+  try {
+    const unfiltered = await discoverDocuments({
+      repoRoot,
+      scopePaths: [scopePath],
+      mode: "informational",
+    });
+    const filteredByProjectKind = await discoverDocuments({
+      repoRoot,
+      scopePaths: [scopePath],
+      docKinds: ["project"],
+      mode: "informational",
+    });
+    const filteredByTaskProfile = await discoverDocuments({
+      repoRoot,
+      scopePaths: [scopePath],
+      profileIds: ["task/basic@v1"],
+      mode: "informational",
+    });
+
+    expect(unfiltered.documents).toHaveLength(1);
+    expect(unfiltered.documents[0]).toMatchObject({
+      declaration: {
+        docKind: null,
+        docProfile: "task/experimental@v9",
+      },
+      discoveryMatches: ["PROJECT.md"],
+      resolved: {
+        profile: {
+          reason: "unknown_profile",
+        },
+      },
+    });
+    expect(filteredByProjectKind.documents).toEqual([]);
+    expect(filteredByTaskProfile.documents).toEqual([]);
   } finally {
     await rm(tempRoot, { recursive: true, force: true });
   }
