@@ -1040,6 +1040,46 @@ Limit the fix to list-context collapse while consuming html block lines.
   });
 });
 
+test("keeps list context across blank lines inside html blocks", () => {
+  expect(
+    composeFixture({
+      path: "plans/list-blank-html-block-checklists.task.md",
+      discoveryMatches: ["**/*.task.md"],
+      markdown: `---
+doc_spec: agent-markdown/0.1
+doc_kind: task
+doc_profile: task/basic@v1
+title: Preserve list context across blank html block lines
+status: ready
+---
+## Objective
+
+Keep valid nested checklist items visible after list-indented HTML blocks that contain blank lines.
+
+## Context / Constraints
+
+The HTML block starts inside a parent list item, contains an interior blank line, then closes before a later nested checklist item at the same list indentation.
+
+## Materially verifiable success criteria
+
+- Parent item
+    <details>
+
+    </details>
+    - [ ] This visible nested checklist item should still count.
+
+## Execution notes
+
+Limit the fix to preserving list context across blank lines while consuming html blocks.
+`,
+    }).validation,
+  ).toEqual({
+    conformance: "semantically_valid",
+    errors: [],
+    warnings: [],
+  });
+});
+
 test("does not keep list context across type-1 html block starts", () => {
   for (const tag of ["script", "style", "pre", "textarea"]) {
     expect(
