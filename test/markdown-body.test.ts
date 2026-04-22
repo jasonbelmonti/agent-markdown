@@ -1,6 +1,10 @@
 import { expect, test } from "bun:test";
 
 import { parseMarkdownSections } from "../index.ts";
+import {
+  htmlBlockFixtureWrappers,
+  htmlRawTagNames,
+} from "./support/html-block-fixtures.ts";
 
 test("parses ordered sections with heading paths while leaving preamble in raw body only", () => {
   const markdown = `Intro text that remains source-only.
@@ -209,3 +213,154 @@ Ship it.
     ],
   });
 });
+
+for (const wrapper of htmlBlockFixtureWrappers) {
+  test(`ignores headings inside ${wrapper.label}`, () => {
+    const markdown = `## Objective
+
+${wrapper.start}
+
+## Hidden
+
+${wrapper.end}
+
+## Notes
+
+Visible note.
+`;
+
+    expect(
+      parseMarkdownSections(markdown).sections.map((section) => ({
+        heading: section.heading,
+        headingPath: section.headingPath,
+      })),
+    ).toEqual([
+      {
+        heading: "Objective",
+        headingPath: ["Objective"],
+      },
+      {
+        heading: "Notes",
+        headingPath: ["Notes"],
+      },
+    ]);
+  });
+}
+
+test("does not suppress later headings after inline html tag lines", () => {
+  const markdown = `## Objective
+
+<span>Inline note without a closing tag
+
+## Notes
+
+Visible heading parsing should continue.
+`;
+
+  expect(parseMarkdownSections(markdown).sections.map((section) => section.heading)).toEqual([
+    "Objective",
+    "Notes",
+  ]);
+});
+
+test("ignores headings inside nested wrapper tags until the outer close", () => {
+  const markdown = `## Objective
+
+<details>
+<details>
+</details>
+## Hidden
+</details>
+
+## Notes
+
+Visible heading parsing should continue.
+`;
+
+  expect(parseMarkdownSections(markdown).sections.map((section) => section.heading)).toEqual([
+    "Objective",
+    "Notes",
+  ]);
+});
+
+test("ignores headings inside wrappers when comment text contains a matching close tag", () => {
+  const markdown = `## Objective
+
+<details>
+<!-- </details> -->
+## Hidden
+</details>
+
+## Notes
+
+Visible heading parsing should continue.
+`;
+
+  expect(parseMarkdownSections(markdown).sections.map((section) => section.heading)).toEqual([
+    "Objective",
+    "Notes",
+  ]);
+});
+
+test("resumes heading parsing after wrapper comments that mention nested opens", () => {
+  const markdown = `## Objective
+
+<details>
+<!-- <details> -->
+</details>
+
+## Notes
+
+Visible heading parsing should continue.
+`;
+
+  expect(parseMarkdownSections(markdown).sections.map((section) => section.heading)).toEqual([
+    "Objective",
+    "Notes",
+  ]);
+});
+
+test("resumes heading parsing after self-closing raw HTML tags", () => {
+  const markdown = `## Objective
+
+<script />
+
+## Notes
+
+Visible note.
+`;
+
+  expect(parseMarkdownSections(markdown).sections.map((section) => section.heading)).toEqual([
+    "Objective",
+    "Notes",
+  ]);
+});
+
+for (const tagName of htmlRawTagNames) {
+  test(`resumes heading parsing after single-line <${tagName}> blocks`, () => {
+    const markdown = `## Objective
+
+<${tagName}>Hidden content</${tagName}>
+
+## Notes
+
+Visible note.
+`;
+
+    expect(
+      parseMarkdownSections(markdown).sections.map((section) => ({
+        heading: section.heading,
+        headingPath: section.headingPath,
+      })),
+    ).toEqual([
+      {
+        heading: "Objective",
+        headingPath: ["Objective"],
+      },
+      {
+        heading: "Notes",
+        headingPath: ["Notes"],
+      },
+    ]);
+  });
+}

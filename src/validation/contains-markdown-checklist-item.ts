@@ -1,6 +1,14 @@
-interface MarkdownLine {
-  content: string;
-}
+import {
+  advancePersistentHtmlBlockState,
+  consumeOpeningHtmlBlockLine,
+  type HtmlBlockStartResult,
+  type PersistentHtmlBlockState,
+} from "../markdown-body/html-blocks.ts";
+import {
+  readIndentationWidth,
+  readLineIndentation,
+  splitMarkdownLines,
+} from "../markdown-body/markdown-lines.ts";
 
 interface FenceState {
   marker: "`" | "~";
@@ -15,17 +23,17 @@ interface ListItemMatch {
 
 const listItemPattern =
   /^([ \t]*)([*+-]|\d+[.)])([ \t]+)(\[(?: |x|X)\](?:[ \t]+|$))?/u;
-const htmlBlockStartPattern =
-  /^ {0,3}<(?:\/?(?:script|style|pre|textarea)\b|\/?(?:address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|figcaption|figure|footer|form|frame|frameset|h[1-6]|head|header|hr|html|iframe|legend|li|link|main|menu|menuitem|nav|noframes|ol|optgroup|option|p|param|search|section|summary|table|tbody|td|tfoot|th|thead|title|tr|track|ul)\b|!--|!\[CDATA\[|\?)/u;
 
 export function containsMarkdownChecklistItem(markdown: string): boolean {
   let openFence: FenceState | null = null;
+  let openHtmlBlock: PersistentHtmlBlockState | null = null;
   const activeListIndentations: number[] = [];
   let previousLineWasBlank = false;
   let previousLineCanContinueParagraph = false;
 
   for (const line of splitMarkdownLines(markdown)) {
     const lineIsBlank = isBlankLine(line.content);
+    const lineIndentation = readLineIndentation(line.content);
 
     if (openFence !== null) {
       if (isClosingFence(line.content, openFence, activeListIndentations)) {
@@ -37,15 +45,39 @@ export function containsMarkdownChecklistItem(markdown: string): boolean {
       continue;
     }
 
+    if (openHtmlBlock !== null) {
+      if (!lineIsBlank) {
+        collapseNestedListIndentations(activeListIndentations, lineIndentation);
+      }
+      openHtmlBlock = advancePersistentHtmlBlockState(line.content, openHtmlBlock);
+      previousLineWasBlank = lineIsBlank;
+      previousLineCanContinueParagraph = false;
+      continue;
+    }
+
     const openingFence = readOpeningFence(line.content, activeListIndentations);
 
     if (openingFence !== null) {
       collapseNestedListIndentations(
         activeListIndentations,
-        readLineIndentation(line.content),
+        lineIndentation,
       );
       openFence = openingFence;
       previousLineWasBlank = false;
+      previousLineCanContinueParagraph = false;
+      continue;
+    }
+
+    const openingHtmlBlock = consumeOpeningHtmlBlock(
+      line.content,
+      lineIndentation,
+      activeListIndentations,
+    );
+
+    if (openingHtmlBlock.consumedLine) {
+      collapseNestedListIndentations(activeListIndentations, lineIndentation);
+      openHtmlBlock = openingHtmlBlock.openBlock;
+      previousLineWasBlank = lineIsBlank;
       previousLineCanContinueParagraph = false;
       continue;
     }
@@ -62,7 +94,7 @@ export function containsMarkdownChecklistItem(markdown: string): boolean {
           previousLineCanContinueParagraph,
         )
       ) {
-        collapseNestedListIndentations(activeListIndentations, readLineIndentation(line.content));
+        collapseNestedListIndentations(activeListIndentations, lineIndentation);
       }
 
       previousLineWasBlank = lineIsBlank;
@@ -76,7 +108,7 @@ export function containsMarkdownChecklistItem(markdown: string): boolean {
       activeListIndentations,
       matchedListItem.markerIndentation,
     );
-    const permittedIndentation = isPermittedChecklistIndentation(
+    const permittedIndentation = isPermittedContainerIndentation(
       matchedListItem.markerIndentation,
       activeListIndentations,
     );
@@ -100,28 +132,6 @@ export function containsMarkdownChecklistItem(markdown: string): boolean {
   }
 
   return false;
-}
-
-function splitMarkdownLines(markdown: string): MarkdownLine[] {
-  if (markdown.length === 0) {
-    return [];
-  }
-
-  const lines: MarkdownLine[] = [];
-  let start = 0;
-
-  while (start < markdown.length) {
-    const newlineIndex = markdown.indexOf("\n", start);
-    const end = newlineIndex === -1 ? markdown.length : newlineIndex + 1;
-
-    lines.push({
-      content: markdown.slice(start, end).replace(/\r?\n$/u, ""),
-    });
-
-    start = end;
-  }
-
-  return lines;
 }
 
 function readListItem(line: string): ListItemMatch | null {
@@ -190,27 +200,6 @@ function isClosingFence(
   );
 }
 
-function readIndentationWidth(indentation: string): number {
-  let width = 0;
-
-  for (const character of indentation) {
-    if (character === "\t") {
-      const remainder = width % 4;
-      width += remainder === 0 ? 4 : 4 - remainder;
-      continue;
-    }
-
-    width += 1;
-  }
-
-  return width;
-}
-
-function readLineIndentation(line: string): number {
-  const matchedIndentation = line.match(/^[ \t]*/u);
-  return readIndentationWidth(matchedIndentation?.[0] ?? "");
-}
-
 function isLazyContinuationLine(
   line: string,
   activeListIndentations: number[],
@@ -243,18 +232,6 @@ function collapseNestedListIndentations(
   }
 }
 
-function isPermittedChecklistIndentation(
-  indentation: number,
-  activeListIndentations: number[],
-): boolean {
-  return (
-    indentation <= 3 ||
-    activeListIndentations.some((activeIndentation) =>
-      isNestedWithinListContent(indentation, activeIndentation),
-    )
-  );
-}
-
 function isBlankLine(line: string): boolean {
   return line.trim().length === 0;
 }
@@ -271,6 +248,19 @@ function isPermittedContainerIndentation(
   );
 }
 
+function consumeOpeningHtmlBlock(
+  line: string,
+  indentation: number,
+  activeListIndentations: number[],
+): HtmlBlockStartResult {
+  return isPermittedContainerIndentation(indentation, activeListIndentations)
+    ? consumeOpeningHtmlBlockLine(line, indentation)
+    : {
+        consumedLine: false,
+        openBlock: null,
+      };
+}
+
 function isNestedWithinListContent(
   indentation: number,
   activeIndentation: number,
@@ -283,17 +273,22 @@ function isParagraphContinuationCandidate(
   activeListIndentations: number[],
 ): boolean {
   return (
-    !startsBlockOutsideParagraph(line) &&
+    !startsBlockOutsideParagraph(line, activeListIndentations) &&
     !isIndentedCodeLine(line, activeListIndentations)
   );
 }
 
-function startsBlockOutsideParagraph(line: string): boolean {
+function startsBlockOutsideParagraph(
+  line: string,
+  activeListIndentations: number[],
+): boolean {
+  const indentation = readLineIndentation(line);
+
   return (
     /^ {0,3}>/u.test(line) ||
     /^ {0,3}#{1,6}(?:[ \t]+|$)/u.test(line) ||
     /^ {0,3}(?:-{3,}|_{3,}|\*{3,})(?:[ \t]*[-_*][ \t]*)*$/u.test(line) ||
-    htmlBlockStartPattern.test(line)
+    consumeOpeningHtmlBlock(line, indentation, activeListIndentations).consumedLine
   );
 }
 

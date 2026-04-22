@@ -773,6 +773,56 @@ test("discoverDocuments does not let conflicting profile filters override a decl
   }
 });
 
+test("discoverDocuments does not let doc_kind-only declarations satisfy same-kind profile filters through hints", async () => {
+  const tempRoot = await createRepoTempDir();
+  const scopePath = toRepoScopePath(tempRoot);
+
+  await writeFile(
+    join(tempRoot, "PROJECT.md"),
+    [
+      "---",
+      "doc_kind: project",
+      'title: "Declared project kind"',
+      "---",
+      "# Notes",
+      "",
+    ].join("\n"),
+  );
+
+  try {
+    const unfiltered = await discoverDocuments({
+      repoRoot,
+      scopePaths: [scopePath],
+      mode: "informational",
+    });
+    const filteredByProjectProfile = await discoverDocuments({
+      repoRoot,
+      scopePaths: [scopePath],
+      profileIds: ["project/basic@v1"],
+      mode: "informational",
+    });
+    const filteredByProjectKind = await discoverDocuments({
+      repoRoot,
+      scopePaths: [scopePath],
+      docKinds: ["project"],
+      mode: "informational",
+    });
+
+    expect(unfiltered.documents).toHaveLength(1);
+    expect(unfiltered.documents[0]).toMatchObject({
+      declaration: {
+        docKind: "project",
+        docProfile: null,
+      },
+      discoveryMatches: ["PROJECT.md"],
+    });
+    expect(filteredByProjectProfile.documents).toEqual([]);
+    expect(filteredByProjectKind.documents).toHaveLength(1);
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("discoverDocuments does not let unknown declared profiles satisfy conflicting hint filters", async () => {
   const tempRoot = await createRepoTempDir();
   const scopePath = toRepoScopePath(tempRoot);

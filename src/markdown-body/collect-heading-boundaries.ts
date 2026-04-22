@@ -1,14 +1,15 @@
+import {
+  advancePersistentHtmlBlockState,
+  consumeOpeningHtmlBlockLine,
+  type PersistentHtmlBlockState,
+} from "./html-blocks.ts";
+import { splitMarkdownLines } from "./markdown-lines.ts";
+
 export interface HeadingBoundary {
   start: number;
   contentStart: number;
   heading: string;
   level: number;
-}
-
-interface MarkdownLine {
-  start: number;
-  end: number;
-  content: string;
 }
 
 interface FenceState {
@@ -19,6 +20,7 @@ interface FenceState {
 export function collectHeadingBoundaries(markdown: string): HeadingBoundary[] {
   const headings: HeadingBoundary[] = [];
   let openFence: FenceState | null = null;
+  let openHtmlBlock: PersistentHtmlBlockState | null = null;
 
   for (const line of splitMarkdownLines(markdown)) {
     if (openFence !== null) {
@@ -29,10 +31,22 @@ export function collectHeadingBoundaries(markdown: string): HeadingBoundary[] {
       continue;
     }
 
+    if (openHtmlBlock !== null) {
+      openHtmlBlock = advancePersistentHtmlBlockState(line.content, openHtmlBlock);
+      continue;
+    }
+
     const openingFence = readOpeningFence(line.content);
 
     if (openingFence !== null) {
       openFence = openingFence;
+      continue;
+    }
+
+    const openingHtmlBlock = consumeOpeningHtmlBlockLine(line.content);
+
+    if (openingHtmlBlock.consumedLine) {
+      openHtmlBlock = openingHtmlBlock.openBlock;
       continue;
     }
 
@@ -50,31 +64,6 @@ export function collectHeadingBoundaries(markdown: string): HeadingBoundary[] {
 
   return headings;
 }
-
-function splitMarkdownLines(markdown: string): MarkdownLine[] {
-  if (markdown.length === 0) {
-    return [];
-  }
-
-  const lines: MarkdownLine[] = [];
-  let start = 0;
-
-  while (start < markdown.length) {
-    const newlineIndex = markdown.indexOf("\n", start);
-    const end = newlineIndex === -1 ? markdown.length : newlineIndex + 1;
-
-    lines.push({
-      start,
-      end,
-      content: markdown.slice(start, end).replace(/\r?\n$/u, ""),
-    });
-
-    start = end;
-  }
-
-  return lines;
-}
-
 function readAtxHeading(
   line: string,
 ): {

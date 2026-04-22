@@ -1,28 +1,26 @@
-import type { DocumentDiscoveryCandidate } from "../document-discovery/index.ts";
 import type {
   DiscoverRequest,
   DiscoverResponse,
   DiscoverResponseDocument,
   DiscoveredDocumentResolvedSummary,
 } from "../resolver-transport/index.ts";
-import { isMvpProfileId } from "../profile-registry/profile-identity.ts";
 
 import {
   loadResolverContext,
   type ResolverContext,
 } from "./context.ts";
 import {
+  matchesDiscoverFilters,
+  shouldIncludeDiscoveredDocument,
+} from "./discover-filtering.ts";
+import {
   prepareResolverDocument,
   type PreparedResolverDocument,
 } from "./prepared-document.ts";
-import {
-  hasDeclarationIdentity,
-  hasDeclaredSemantics,
-} from "./declaration-identity.ts";
+import { hasDeclaredSemantics } from "./declaration-identity.ts";
 import { listScopedMarkdownPaths } from "./discover-document-paths.ts";
 import { resolvePreparedDocument } from "./resolve-document.ts";
 
-type ProfilesById = ResolverContext["registry"]["profilesById"];
 type DiscoverDeclaration = DiscoverResponseDocument["declaration"];
 
 export async function discoverDocuments(
@@ -58,7 +56,7 @@ export async function discoverDocuments(
     );
 
     if (
-      !shouldIncludeDocument(
+      !shouldIncludeDiscoveredDocument(
         context.registry.profilesById,
         preparedDocument.candidate,
         declaration,
@@ -138,174 +136,12 @@ async function createResolvedSummary(
   };
 }
 
-function shouldIncludeDocument(
-  profilesById: ProfilesById,
-  candidate: DocumentDiscoveryCandidate,
-  declaration: DiscoverDeclaration,
-  request: DiscoverRequest,
-  matchesFilters: boolean,
-): boolean {
-  if (
-    (declaration !== null && hasDeclarationIdentity(declaration)) ||
-    candidate.discoveryMatches.length > 0
-  ) {
-    return true;
-  }
-
-  if (!matchesFilters || declaration === null || !hasDiscoverFilters(request)) {
-    return false;
-  }
-
-  return matchesDeclaredFilters(profilesById, candidate, declaration, request);
-}
-
 function toDiscoverDeclaration(
   preparedDocument: PreparedResolverDocument,
 ): DiscoverDeclaration {
   const declaration = preparedDocument.discoveredDocument.declaration;
 
   return hasDeclaredSemantics(declaration) ? declaration : null;
-}
-
-function matchesDiscoverFilters(
-  profilesById: ProfilesById,
-  candidate: DocumentDiscoveryCandidate,
-  declaration: DiscoverDeclaration,
-  request: DiscoverRequest,
-): boolean {
-  const allowHintFallback = shouldAllowHintFallback(declaration);
-
-  return (
-    matchesRequestedDocKinds(
-      profilesById,
-      candidate,
-      declaration,
-      request.docKinds,
-      allowHintFallback,
-    ) &&
-    matchesRequestedProfileIds(
-      profilesById,
-      candidate,
-      declaration,
-      request.profileIds,
-      allowHintFallback,
-    )
-  );
-}
-
-function matchesDeclaredFilters(
-  profilesById: ProfilesById,
-  candidate: DocumentDiscoveryCandidate,
-  declaration: DiscoverDeclaration,
-  request: DiscoverRequest,
-): boolean {
-  return (
-    matchesRequestedDocKinds(
-      profilesById,
-      candidate,
-      declaration,
-      request.docKinds,
-      false,
-    ) &&
-    matchesRequestedProfileIds(
-      profilesById,
-      candidate,
-      declaration,
-      request.profileIds,
-      false,
-    )
-  );
-}
-
-function matchesRequestedDocKinds(
-  profilesById: ProfilesById,
-  candidate: DocumentDiscoveryCandidate,
-  declaration: DiscoverDeclaration,
-  requestedDocKinds: readonly string[] | undefined,
-  allowHintFallback: boolean,
-): boolean {
-  if (!requestedDocKinds || requestedDocKinds.length === 0) {
-    return true;
-  }
-
-  const declaredDocKind = getDeclaredDocKind(profilesById, declaration);
-
-  if (declaredDocKind !== null) {
-    return requestedDocKinds.includes(declaredDocKind);
-  }
-
-  if (!allowHintFallback) {
-    return false;
-  }
-
-  return candidate.matchedHints.some((hint) =>
-    requestedDocKinds.includes(profilesById[hint.origin.profileId].doc_kind),
-  );
-}
-
-function matchesRequestedProfileIds(
-  profilesById: ProfilesById,
-  candidate: DocumentDiscoveryCandidate,
-  declaration: DiscoverDeclaration,
-  requestedProfileIds: readonly string[] | undefined,
-  allowHintFallback: boolean,
-): boolean {
-  if (!requestedProfileIds || requestedProfileIds.length === 0) {
-    return true;
-  }
-
-  if (typeof declaration?.docProfile === "string") {
-    return requestedProfileIds.includes(declaration.docProfile);
-  }
-
-  if (typeof declaration?.docKind === "string") {
-    if (!allowHintFallback) {
-      return false;
-    }
-
-    return candidate.matchedHints.some((hint) =>
-      requestedProfileIds.includes(hint.origin.profileId) &&
-      profilesById[hint.origin.profileId].doc_kind === declaration.docKind,
-    );
-  }
-
-  if (!allowHintFallback) {
-    return false;
-  }
-
-  return candidate.matchedHints.some((hint) =>
-    requestedProfileIds.includes(hint.origin.profileId),
-  );
-}
-
-function shouldAllowHintFallback(
-  declaration: DiscoverDeclaration,
-): boolean {
-  return declaration === null || !hasDeclarationIdentity(declaration);
-}
-
-function getDeclaredDocKind(
-  profilesById: ProfilesById,
-  declaration: DiscoverDeclaration,
-): string | null {
-  if (typeof declaration?.docKind === "string") {
-    return declaration.docKind;
-  }
-
-  if (
-    isMvpProfileId(declaration?.docProfile)
-  ) {
-    return profilesById[declaration.docProfile].doc_kind;
-  }
-
-  return null;
-}
-
-function hasDiscoverFilters(request: DiscoverRequest): boolean {
-  return Boolean(
-    (request.docKinds && request.docKinds.length > 0) ||
-      (request.profileIds && request.profileIds.length > 0),
-  );
 }
 
 function isProfileSpecification(
