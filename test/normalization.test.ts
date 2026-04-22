@@ -733,6 +733,44 @@ Limit the fix to excluding inline HTML tags from shared HTML-block classificatio
   });
 });
 
+test("keeps checklist detection active after self-closing raw HTML tags", () => {
+  expect(
+    composeFixture({
+      path: "plans/self-closing-raw-html-checklists.task.md",
+      discoveryMatches: ["**/*.task.md"],
+      markdown: `---
+doc_spec: agent-markdown/0.1
+doc_kind: task
+doc_profile: task/basic@v1
+title: Resume after self-closing raw html tags
+status: ready
+---
+## Objective
+
+Keep visible checklist items countable after self-closing raw HTML lines.
+
+## Context / Constraints
+
+The self-closing <script /> line appears before the only visible checklist item.
+
+## Materially verifiable success criteria
+
+<script />
+
+- [ ] Visible checklist remains valid.
+
+## Execution notes
+
+Limit the fix to classifying self-closing raw HTML tags as single-line structural lines.
+`,
+    }).validation,
+  ).toEqual({
+    conformance: "semantically_valid",
+    errors: [],
+    warnings: [],
+  });
+});
+
 test("does not count checklist items hidden inside nested wrapper tags before the outer close", () => {
   expect(
     composeFixture({
@@ -777,6 +815,93 @@ Limit the fix to tracking nested same-tag wrapper depth in shared HTML-block sta
         path: 'body.sections["Materially verifiable success criteria"]',
       },
     ],
+    warnings: [],
+  });
+});
+
+test("does not count checklist items hidden when wrapper comments mention a matching close tag", () => {
+  expect(
+    composeFixture({
+      path: "plans/comment-contained-wrapper-close-checklists.task.md",
+      discoveryMatches: ["**/*.task.md"],
+      markdown: `---
+doc_spec: agent-markdown/0.1
+doc_kind: task
+doc_profile: task/basic@v1
+title: Comment-contained wrapper close markers stay hidden
+status: ready
+---
+## Objective
+
+Keep wrapper comments from leaking hidden checklist markers.
+
+## Context / Constraints
+
+The outer <details> wrapper remains open even though a comment line mentions </details>.
+
+## Materially verifiable success criteria
+
+<details>
+<!-- </details> -->
+- [ ] Hidden checklist only.
+</details>
+
+## Execution notes
+
+Limit the fix to ignoring comment-contained matching close tags while advancing wrapper state.
+`,
+    }).validation,
+  ).toEqual({
+    conformance: "recognized",
+    errors: [
+      {
+        code: "checklist-required",
+        severity: "error",
+        message:
+          'Section "Materially verifiable success criteria" must contain checklist items for profile "task/basic@v1".',
+        path: 'body.sections["Materially verifiable success criteria"]',
+      },
+    ],
+    warnings: [],
+  });
+});
+
+test("keeps visible checklist items countable after wrapper comments mention nested opens", () => {
+  expect(
+    composeFixture({
+      path: "plans/comment-contained-wrapper-open-checklists.task.md",
+      discoveryMatches: ["**/*.task.md"],
+      markdown: `---
+doc_spec: agent-markdown/0.1
+doc_kind: task
+doc_profile: task/basic@v1
+title: Comment-contained wrapper opens do not hide later visible checklists
+status: ready
+---
+## Objective
+
+Keep wrapper comments from leaving later visible checklist items hidden.
+
+## Context / Constraints
+
+The comment line mentions <details>, but the outer wrapper really closes before the visible checklist item.
+
+## Materially verifiable success criteria
+
+<details>
+<!-- <details> -->
+</details>
+
+- [ ] Visible checklist remains valid.
+
+## Execution notes
+
+Limit the fix to ignoring comment-contained matching opens while advancing wrapper state.
+`,
+    }).validation,
+  ).toEqual({
+    conformance: "semantically_valid",
+    errors: [],
     warnings: [],
   });
 });

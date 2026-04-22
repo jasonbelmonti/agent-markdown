@@ -283,6 +283,59 @@ Visible heading parsing should continue.
   ]);
 });
 
+test("ignores headings inside wrappers when comment text contains a matching close tag", () => {
+  const markdown = `## Objective
+
+<details>
+<!-- </details> -->
+## Hidden
+</details>
+
+## Notes
+
+Visible heading parsing should continue.
+`;
+
+  expect(parseMarkdownSections(markdown).sections.map((section) => section.heading)).toEqual([
+    "Objective",
+    "Notes",
+  ]);
+});
+
+test("resumes heading parsing after wrapper comments that mention nested opens", () => {
+  const markdown = `## Objective
+
+<details>
+<!-- <details> -->
+</details>
+
+## Notes
+
+Visible heading parsing should continue.
+`;
+
+  expect(parseMarkdownSections(markdown).sections.map((section) => section.heading)).toEqual([
+    "Objective",
+    "Notes",
+  ]);
+});
+
+test("resumes heading parsing after self-closing raw HTML tags", () => {
+  const markdown = `## Objective
+
+<script />
+
+## Notes
+
+Visible note.
+`;
+
+  expect(parseMarkdownSections(markdown).sections.map((section) => section.heading)).toEqual([
+    "Objective",
+    "Notes",
+  ]);
+});
+
 for (const tagName of htmlRawTagNames) {
   test(`resumes heading parsing after single-line <${tagName}> blocks`, () => {
     const markdown = `## Objective

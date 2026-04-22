@@ -22,6 +22,7 @@ export type HtmlBlockState =
       blockKind: "wrapper-tag";
       tagName: string;
       nestingDepth: number;
+      commentOpen: boolean;
     }
   | {
       kind: "terminator-block";

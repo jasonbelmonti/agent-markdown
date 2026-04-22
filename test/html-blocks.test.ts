@@ -96,6 +96,7 @@ test("keeps wrapper tags open across blank lines until a matching close tag", ()
     blockKind: "wrapper-tag",
     tagName: "details",
     nestingDepth: 0,
+    commentOpen: false,
   });
 
   const openState = advanceHtmlBlockState("<details>", state);
@@ -105,12 +106,14 @@ test("keeps wrapper tags open across blank lines until a matching close tag", ()
     blockKind: "wrapper-tag",
     tagName: "details",
     nestingDepth: 1,
+    commentOpen: false,
   });
   expect(advanceHtmlBlockState("", openState!)).toEqual({
     kind: "matching-tag-block",
     blockKind: "wrapper-tag",
     tagName: "details",
     nestingDepth: 1,
+    commentOpen: false,
   });
   expect(advanceHtmlBlockState("</details>", openState!)).toBeNull();
 });
@@ -121,6 +124,7 @@ test("recognizes inline wrapper openers that include trailing summary content", 
     blockKind: "wrapper-tag",
     tagName: "details",
     nestingDepth: 0,
+    commentOpen: false,
   });
 
   const openState = advanceHtmlBlockState("<details><summary>Summary</summary>", state);
@@ -132,6 +136,7 @@ test("recognizes inline wrapper openers that include trailing summary content", 
     blockKind: "wrapper-tag",
     tagName: "details",
     nestingDepth: 1,
+    commentOpen: false,
   });
   expect(
     advanceHtmlBlockState("<details><summary>Summary</summary>", state),
@@ -140,6 +145,7 @@ test("recognizes inline wrapper openers that include trailing summary content", 
     blockKind: "wrapper-tag",
     tagName: "details",
     nestingDepth: 1,
+    commentOpen: false,
   });
   expect(advanceHtmlBlockState("</details>", openState!)).toBeNull();
 });
@@ -150,6 +156,7 @@ test("keeps generic wrappers open until a matching close tag", () => {
     blockKind: "wrapper-tag",
     tagName: "custom-tag",
     nestingDepth: 0,
+    commentOpen: false,
   });
 
   const openState = advanceHtmlBlockState("<custom-tag>", state);
@@ -159,12 +166,14 @@ test("keeps generic wrappers open until a matching close tag", () => {
     blockKind: "wrapper-tag",
     tagName: "custom-tag",
     nestingDepth: 1,
+    commentOpen: false,
   });
   expect(advanceHtmlBlockState("", openState!)).toEqual({
     kind: "matching-tag-block",
     blockKind: "wrapper-tag",
     tagName: "custom-tag",
     nestingDepth: 1,
+    commentOpen: false,
   });
   expect(advanceHtmlBlockState("</custom-tag>", openState!)).toBeNull();
 });
@@ -175,6 +184,7 @@ test("keeps wrapper tags open until the outer matching close when the same tag i
     blockKind: "wrapper-tag",
     tagName: "details",
     nestingDepth: 0,
+    commentOpen: false,
   });
 
   const outerOpenState = advanceHtmlBlockState("<details>", state);
@@ -184,6 +194,7 @@ test("keeps wrapper tags open until the outer matching close when the same tag i
     blockKind: "wrapper-tag",
     tagName: "details",
     nestingDepth: 2,
+    commentOpen: false,
   });
   expect(
     advanceHtmlBlockState(
@@ -195,8 +206,98 @@ test("keeps wrapper tags open until the outer matching close when the same tag i
     blockKind: "wrapper-tag",
     tagName: "details",
     nestingDepth: 1,
+    commentOpen: false,
   });
   expect(advanceHtmlBlockState("</details>", outerOpenState!)).toBeNull();
+});
+
+test("treats self-closing raw HTML tags as single-line structural lines", () => {
+  const state = expectOpenState("<script />", {
+    kind: "single-line-structural",
+    structuralKind: "self-closing-tag",
+  });
+
+  expect(advanceHtmlBlockState("<script />", state)).toBeNull();
+});
+
+test("does not let comment-contained closing tags collapse wrapper state", () => {
+  const state = expectOpenState("<details>", {
+    kind: "matching-tag-block",
+    blockKind: "wrapper-tag",
+    tagName: "details",
+    nestingDepth: 0,
+    commentOpen: false,
+  });
+
+  expect(
+    advanceHtmlBlockState(
+      "<!-- </details> -->",
+      advanceHtmlBlockState("<details>", state)!,
+    ),
+  ).toEqual({
+    kind: "matching-tag-block",
+    blockKind: "wrapper-tag",
+    tagName: "details",
+    nestingDepth: 1,
+    commentOpen: false,
+  });
+});
+
+test("does not let comment-contained opening tags increase wrapper depth", () => {
+  const state = expectOpenState("<details>", {
+    kind: "matching-tag-block",
+    blockKind: "wrapper-tag",
+    tagName: "details",
+    nestingDepth: 0,
+    commentOpen: false,
+  });
+
+  expect(
+    advanceHtmlBlockState(
+      "<!-- <details> -->",
+      advanceHtmlBlockState("<details>", state)!,
+    ),
+  ).toEqual({
+    kind: "matching-tag-block",
+    blockKind: "wrapper-tag",
+    tagName: "details",
+    nestingDepth: 1,
+    commentOpen: false,
+  });
+});
+
+test("keeps wrapper state stable across multi-line html comments", () => {
+  const state = expectOpenState("<details>", {
+    kind: "matching-tag-block",
+    blockKind: "wrapper-tag",
+    tagName: "details",
+    nestingDepth: 0,
+    commentOpen: false,
+  });
+  const wrapperOpenState = advanceHtmlBlockState("<details>", state)!;
+  const commentOpenState = advanceHtmlBlockState("<!-- <details>", wrapperOpenState);
+
+  expect(commentOpenState).toEqual({
+    kind: "matching-tag-block",
+    blockKind: "wrapper-tag",
+    tagName: "details",
+    nestingDepth: 1,
+    commentOpen: true,
+  });
+  expect(advanceHtmlBlockState("still hidden </details>", commentOpenState!)).toEqual({
+    kind: "matching-tag-block",
+    blockKind: "wrapper-tag",
+    tagName: "details",
+    nestingDepth: 1,
+    commentOpen: true,
+  });
+  expect(advanceHtmlBlockState("-->", commentOpenState!)).toEqual({
+    kind: "matching-tag-block",
+    blockKind: "wrapper-tag",
+    tagName: "details",
+    nestingDepth: 1,
+    commentOpen: false,
+  });
 });
 
 test("does not treat inline html tags as block starters", () => {
@@ -288,5 +389,6 @@ test("respects the caller-provided indentation gate", () => {
     blockKind: "wrapper-tag",
     tagName: "details",
     nestingDepth: 0,
+    commentOpen: false,
   });
 });

@@ -1,6 +1,6 @@
 import {
   containsClosingTag,
-  readMatchingTagDepthDelta,
+  readMatchingTagTransition,
   readHtmlBlockStart,
 } from "./html-block-recognition.ts";
 export {
@@ -87,12 +87,18 @@ function advanceMatchingWrapperTagBlock(
   line: string,
   state: Extract<HtmlBlockState, { kind: "matching-tag-block"; blockKind: "wrapper-tag" }>,
 ): Extract<PersistentHtmlBlockState, { kind: "matching-tag-block"; blockKind: "wrapper-tag" }> | null {
-  const nextDepth = state.nestingDepth + readMatchingTagDepthDelta(line, state.tagName);
+  const transition = readMatchingTagTransition(
+    line,
+    state.tagName,
+    state.commentOpen,
+  );
+  const nextDepth = state.nestingDepth + transition.depthDelta;
 
   return nextDepth > 0
     ? {
         ...state,
         nestingDepth: nextDepth,
+        commentOpen: transition.commentOpen,
       }
     : null;
 }

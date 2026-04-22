@@ -18,6 +18,16 @@ interface TerminatorBlockDefinition {
   terminator: HtmlTerminator;
 }
 
+interface HtmlCommentStrippedLine {
+  content: string;
+  commentOpen: boolean;
+}
+
+interface MatchingTagTransition {
+  depthDelta: number;
+  commentOpen: boolean;
+}
+
 const htmlVoidTagNames = new Set([
   "area",
   "base",
@@ -141,13 +151,19 @@ export function readHtmlBlockStart(
     };
   }
 
+  const openingTag = readOpeningHtmlTag(blockContent);
   const rawTagName = readRawHtmlTagName(blockContent);
 
   if (rawTagName !== null) {
+    if (openingTag?.selfClosing) {
+      return {
+        kind: "single-line-structural",
+        structuralKind: "self-closing-tag",
+      };
+    }
+
     return readMatchingTagBlock(blockContent, "raw-tag", rawTagName);
   }
-
-  const openingTag = readOpeningHtmlTag(blockContent);
 
   if (openingTag === null) {
     return null;
@@ -178,18 +194,23 @@ export function containsClosingTag(line: string, tagName: string): boolean {
   return new RegExp(
     `</${escapeForRegExp(tagName)}(?:\\s|>)`,
     "iu",
-  ).test(line);
+  ).test(stripHtmlCommentsFromLine(line, false).content);
 }
 
-export function readMatchingTagDepthDelta(line: string, tagName: string): number {
+export function readMatchingTagTransition(
+  line: string,
+  tagName: string,
+  initialCommentOpen: boolean = false,
+): MatchingTagTransition {
   const matchingTagPattern = new RegExp(
     `<(/?)${escapeForRegExp(tagName)}\\b[^>]*>`,
     "igu",
   );
+  const strippedLine = stripHtmlCommentsFromLine(line, initialCommentOpen);
   let openCount = 0;
   let closeCount = 0;
 
-  for (const match of line.matchAll(matchingTagPattern)) {
+  for (const match of strippedLine.content.matchAll(matchingTagPattern)) {
     const matchedTag = match[0];
 
     if (match[1] === "/") {
@@ -202,7 +223,10 @@ export function readMatchingTagDepthDelta(line: string, tagName: string): number
     }
   }
 
-  return openCount - closeCount;
+  return {
+    depthDelta: openCount - closeCount,
+    commentOpen: strippedLine.commentOpen,
+  };
 }
 
 function readTerminatorBlockStart(blockContent: string): HtmlBlockState | null {
@@ -244,7 +268,9 @@ function readMatchingWrapperTagBlock(
   blockContent: string,
   tagName: string,
 ): HtmlBlockState {
-  return readMatchingTagDepthDelta(blockContent, tagName) === 0
+  const transition = readMatchingTagTransition(blockContent, tagName);
+
+  return transition.depthDelta === 0
     ? {
         kind: "single-line-structural",
         structuralKind: "inline-matching-tag",
@@ -254,6 +280,7 @@ function readMatchingWrapperTagBlock(
         blockKind: "wrapper-tag",
         tagName,
         nestingDepth: 0,
+        commentOpen: transition.commentOpen,
       };
 }
 
@@ -305,6 +332,50 @@ function readRawHtmlTagName(blockContent: string): RawHtmlTagName | null {
 
 function isWrapperHtmlTagName(tagName: string): boolean {
   return tagName.includes("-") || htmlWrapperTagNames.has(tagName);
+}
+
+function stripHtmlCommentsFromLine(
+  line: string,
+  initialCommentOpen: boolean,
+): HtmlCommentStrippedLine {
+  let content = "";
+  let commentOpen = initialCommentOpen;
+  let cursor = 0;
+
+  while (cursor < line.length) {
+    if (commentOpen) {
+      const commentEnd = line.indexOf("-->", cursor);
+
+      if (commentEnd === -1) {
+        return {
+          content,
+          commentOpen: true,
+        };
+      }
+
+      cursor = commentEnd + 3;
+      commentOpen = false;
+      continue;
+    }
+
+    const commentStart = line.indexOf("<!--", cursor);
+
+    if (commentStart === -1) {
+      return {
+        content: content + line.slice(cursor),
+        commentOpen: false,
+      };
+    }
+
+    content += line.slice(cursor, commentStart);
+    cursor = commentStart + 4;
+    commentOpen = true;
+  }
+
+  return {
+    content,
+    commentOpen,
+  };
 }
 
 function escapeForRegExp(value: string): string {
