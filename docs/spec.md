@@ -302,6 +302,17 @@ Markdown body parsing baseline:
   must not redefine the baseline Markdown parsing model without explicitly
   declaring and enforcing that narrower contract
 
+Temporary implementation note:
+
+- the repository is still migrating to this parsing baseline under `BEL-848`
+  through `BEL-852`
+- current runtime behavior and normalization tests may still reflect the older
+  repo-local HTML-hidden-content rules explored during the Group 3 remediation
+  cycle
+- until that migration lands, treat the current implementation and tests as the
+  authoritative description of shipped parser behavior where they differ from
+  this target baseline
+
 ### Stage 5: Validation and affordance projection
 
 Tools apply structural and semantic validation and then project affordances that
