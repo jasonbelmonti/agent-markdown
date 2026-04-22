@@ -14,6 +14,8 @@ the contract decisions needed to keep the parser choice separate from
 - PR `#28` closed the HTML-block remediation loop, but it also showed that
   repo-local parsing rules around raw HTML are expensive to maintain and easy
   to destabilize.
+- This document supersedes the earlier parser-semantics and execution-source
+  role of `docs/plans/group-3-html-block-remediation.md`.
 - The goal of this spike is not to change runtime behavior yet. The goal is to
   choose the parser stack and align the design documents with a clearer
   Markdown baseline.
@@ -68,9 +70,10 @@ alternatives.
   task-list items.
 - The mdast/micromark stack gives a direct syntax tree without requiring the
   broader remark processing pipeline when a smaller boundary is sufficient.
-- A quick Bun-compatible spike confirmed that the stack produces nested
+- A quick Bun-compatible local spike suggested that the stack produces nested
   task-list structure in the shape the repository needs for checklist
-  validation.
+  validation, which is strong enough to justify the migration direction even
+  though the full adapter design still belongs in `BEL-848`.
 
 ## Rejected Alternatives
 

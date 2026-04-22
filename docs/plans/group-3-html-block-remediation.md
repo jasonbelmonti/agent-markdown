@@ -1,6 +1,29 @@
 # Group 3 HTML Block Remediation Plan
 
-Status: Proposed remediation plan for Group 3 parser-contract cleanup
+Status: Historical remediation note; superseded as an active parser-contract
+execution source by the Markdown engine baseline adopted in `BEL-847`
+
+## Supersession note
+
+This document captures the parser-contract direction that was developed during
+the PR `#27` / PR `#28` remediation loop.
+
+It is preserved as historical context for:
+
+- the specific HTML-wrapper failure mode that drove the remediation
+- the shape of the shared-helper contract explored during that work
+- the audit history tracked under `BEL-816`
+
+It is no longer the active execution source for parser semantics.
+
+Current authoritative direction for future parser work now lives in:
+
+- `docs/spec.md` for the normative Markdown parsing baseline
+- `docs/plans/group-3-parser-library-migration.md` for the BEL-847 parser
+  selection and migration direction
+
+Where this document conflicts with those newer sources, treat this document as
+historical reference rather than current contract.
 
 ## Objective
 
@@ -12,6 +35,8 @@ final fix can land through a clean replacement PR that supersedes `#27`.
 
 - This plan is a follow-up to Group 3 audit findings and the review churn on
   PR `#27`.
+- This note reflects the repo-local HTML-contract direction that was under
+  consideration before the Markdown engine reboot decision in `BEL-847`.
 - The root problem is not one missing edge case; it is that HTML block
   semantics were being patched per reproducer instead of specified once as a
   shared parser contract.
@@ -26,6 +51,9 @@ final fix can land through a clean replacement PR that supersedes `#27`.
   is a replacement PR from `main` after the contract is coherent.
 - Linear tracking for this work lives under `BEL-816` with child issues
   `BEL-838` through `BEL-841`.
+- That remediation stack is now historical context; future parser work should
+  follow the newer CommonMark/GFM baseline instead of reopening this document
+  as the active contract.
 
 ## Materially verifiable success criteria
 
@@ -82,6 +110,14 @@ blank lines, outdented closes, generic wrappers, and single-line raw tags.
   validation.
 
 ## Target HTML Block Contract
+
+Historical note:
+
+The remaining sections in this document describe the repo-local HTML-block
+contract that was proposed during the PR `#27` / PR `#28` remediation cycle.
+
+They are preserved to explain that earlier direction, not to define the active
+Markdown baseline for future implementation work.
 
 The shared helper in `src/markdown-body/html-blocks.ts` should model HTML
 structure using explicit categories.
@@ -211,7 +247,7 @@ Keep and extend existing end-to-end tests so they prove:
 
 ## Execution Decomposition
 
-This remediation is tracked as the following child issues under `BEL-816`:
+This remediation was tracked as the following child issues under `BEL-816`:
 
 - `BEL-838`: document the remediation design
 - `BEL-839`: add direct HTML block contract tests
@@ -219,9 +255,16 @@ This remediation is tracked as the following child issues under `BEL-816`:
   transitions
 - `BEL-841`: rewire downstream consumers and prepare the replacement PR
 
-Each issue should cite this document as its execution source.
+These issues reflect the earlier remediation stack and should be read as
+historical traceability, not as the execution source for BEL-847 and later
+parser-library migration work.
 
 ## Replacement PR Strategy
+
+Historical note:
+
+This section refers to the earlier PR `#27` remediation strategy and is kept
+only for audit history.
 
 - Keep PR `#27` open only as reference while the replacement implementation is
   prepared.
