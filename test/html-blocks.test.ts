@@ -252,6 +252,15 @@ test("treats standalone closing HTML tags as single-line structural lines", () =
   expect(advanceHtmlBlockState("</details>", state)).toBeNull();
 });
 
+test("treats closing HTML tags with trailing content as single-line structural lines", () => {
+  const state = expectOpenState("</details> trailing note", {
+    kind: "single-line-structural",
+    structuralKind: "closing-tag",
+  });
+
+  expect(advanceHtmlBlockState("</details> trailing note", state)).toBeNull();
+});
+
 test("treats self-closing HTML tags as single-line structural lines", () => {
   const state = expectOpenState("<custom-tag />", {
     kind: "single-line-structural",

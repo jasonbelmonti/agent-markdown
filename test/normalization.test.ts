@@ -1079,6 +1079,52 @@ Limit the fix to closing html-tag handling in checklist detection.
   });
 });
 
+test("does not keep list context across closing html tags with trailing content", () => {
+  expect(
+    composeFixture({
+      path: "plans/list-closing-html-tag-trailing-content-checklists.task.md",
+      discoveryMatches: ["**/*.task.md"],
+      markdown: `---
+doc_spec: agent-markdown/0.1
+doc_kind: task
+doc_profile: task/basic@v1
+title: Stop list context at closing html tags with trailing content
+status: ready
+---
+## Objective
+
+Keep lazy continuation handling from crossing closing HTML tags with same-line trailing content.
+
+## Context / Constraints
+
+A closing HTML tag like </details> trailing note should terminate lazy continuation before a later indented checklist-looking line.
+
+## Materially verifiable success criteria
+
+10. Parent item
+</details> trailing note
+    - [ ] This line should not count after the closing html tag line.
+
+## Execution notes
+
+Limit the fix to closing html-tag recognition at line start rather than end-of-line anchoring.
+`,
+    }).validation,
+  ).toEqual({
+    conformance: "recognized",
+    errors: [
+      {
+        code: "checklist-required",
+        severity: "error",
+        message:
+          'Section "Materially verifiable success criteria" must contain checklist items for profile "task/basic@v1".',
+        path: 'body.sections["Materially verifiable success criteria"]',
+      },
+    ],
+    warnings: [],
+  });
+});
+
 test("does not keep stale list context after outdented html block closes", () => {
   expect(
     composeFixture({

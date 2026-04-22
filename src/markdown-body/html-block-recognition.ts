@@ -113,7 +113,7 @@ const terminatorBlockDefinitions: TerminatorBlockDefinition[] = [
     terminator: ">",
   },
 ];
-const closingHtmlTagPattern = /^<\/([A-Za-z][A-Za-z0-9-]*)\s*>\s*$/iu;
+const closingHtmlTagPattern = /^<\/([A-Za-z][A-Za-z0-9-]*)\s*>/iu;
 const rawHtmlTagPattern = /^<(pre|script|style|textarea)\b/iu;
 const openingHtmlTagPattern =
   /^<([A-Za-z][A-Za-z0-9-]*)(?:\s[^>]*)?\s*(\/?)>/iu;
