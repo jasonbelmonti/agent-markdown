@@ -28,6 +28,7 @@ The MVP intentionally covers only:
 
 - the `agent-markdown/0.1` meta-spec
 - Markdown-defined profile documents with constrained YAML frontmatter
+- CommonMark body parsing with supported GFM task-list syntax
 - three first-class profiles:
   - `task/basic@v1`
   - `project/basic@v1`
@@ -283,6 +284,21 @@ candidate, but it must not be treated as semantically valid.
 
 Tools parse the Markdown body and metadata according to the resolved profile and
 produce the normalized envelope.
+
+Markdown body parsing baseline:
+
+- instance document bodies use CommonMark as the normative parsing baseline
+- the MVP additionally supports GitHub Flavored Markdown task-list markers
+  because checklist structure is part of the `task/basic@v1` contract
+- raw HTML remains part of the accepted Markdown surface and is interpreted
+  according to the chosen CommonMark/GFM parser rather than repo-local
+  hidden-content rules
+- structural and semantic validation operate on the parsed Markdown structure;
+  they must not silently override the underlying parser's interpretation of
+  headings, lists, task items, or raw HTML blocks
+- profile documents may add validation rules over parsed structure, but they
+  must not redefine the baseline Markdown parsing model without explicitly
+  declaring and enforcing that narrower contract
 
 ### Stage 5: Validation and affordance projection
 

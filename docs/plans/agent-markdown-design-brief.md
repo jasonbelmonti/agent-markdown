@@ -177,6 +177,55 @@ For the MVP, validation rules inside profile documents should stay declarative.
 Custom code hooks for profile-specific validation may be added later, but they
 should not be required to define or consume the initial profile set.
 
+## Markdown Engine Baseline
+
+### Decision
+
+Treat instance-document bodies as standard Markdown rather than as a
+repo-specific parsing dialect.
+
+The intended baseline is:
+
+- CommonMark for core Markdown structure
+- GitHub Flavored Markdown task-list syntax for checklist semantics used by the
+  MVP task profile
+- raw HTML interpreted according to the chosen Markdown parser rather than
+  hidden by custom repository-local rules
+
+The preferred parser substrate for the next engine pass is:
+
+- `mdast-util-from-markdown`
+- `micromark-extension-gfm`
+- `mdast-util-gfm`
+
+Supporting traversal and text helpers may be added as needed, but the parser
+decision should stay anchored to the mdast/micromark ecosystem rather than a
+generic HTML parser.
+
+### Rationale
+
+- This keeps `agent-markdown` aligned with well-adopted Markdown behavior
+  instead of competing with it.
+- The parser layer should own Markdown structure. Repository code should own
+  only `agent-markdown` semantics such as required sections, declaration
+  fields, and profile-governed checklist requirements.
+- Custom HTML-hiding rules create a fragile seam between the Markdown engine
+  and profile validation. The meta-spec should not promise those semantics
+  unless it is willing to carry the long-term implementation burden.
+
+### Constraint
+
+Profiles may validate parsed structure, but they should not silently narrow or
+reinterpret the underlying Markdown parsing model.
+
+If a future profile wants to forbid or reinterpret otherwise valid Markdown
+constructs, that narrower surface must be:
+
+- declared explicitly in the profile contract
+- backed by validator support that actually enforces the restriction
+- treated as an intentional profile-level burden rather than as an invisible
+  property of the base meta-spec
+
 ## Initial MVP Profile Set
 
 ### Decision

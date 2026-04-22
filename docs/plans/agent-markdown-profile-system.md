@@ -245,6 +245,30 @@ Examples:
 These affordances help agents operate consistently without hard-coding a fixed
 set of special filenames.
 
+### 6.10 Markdown parsing baseline
+
+The meta-spec should define the Markdown parsing baseline once so individual
+profiles do not accidentally turn parsing behavior into local folklore.
+
+Default direction:
+
+- CommonMark defines the core body-parsing model
+- supported GFM features may be layered in explicitly when the meta-spec
+  depends on them, such as task-list syntax
+- raw HTML is interpreted according to the selected Markdown engine rather than
+  hidden or reinterpreted by profile-local heuristics
+
+Profiles may add validation rules over parsed structure, but they should not
+silently redefine what counts as a heading, list, task item, or HTML block.
+
+If a profile wants a narrower authoring surface than the meta-spec baseline, it
+must:
+
+- declare that narrower rule explicitly
+- provide validator support that actually enforces it
+- accept the compatibility and maintenance burden of diverging from the shared
+  Markdown engine contract
+
 ## 7. Proposed Meta-Model
 
 The core system should define a minimal abstract model for special Markdown
@@ -300,6 +324,11 @@ A profile should be able to define the following.
 - structural validation
 - semantic validation
 - profile-specific invariants
+
+Validation rules should operate on the parsed Markdown structure produced by
+the shared engine contract. They should not quietly replace that parsing model
+with profile-local interpretations of raw HTML, list continuation, or heading
+visibility.
 
 ### 8.6 Agent-use semantics
 
