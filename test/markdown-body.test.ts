@@ -263,6 +263,26 @@ Visible heading parsing should continue.
   ]);
 });
 
+test("ignores headings inside nested wrapper tags until the outer close", () => {
+  const markdown = `## Objective
+
+<details>
+<details>
+</details>
+## Hidden
+</details>
+
+## Notes
+
+Visible heading parsing should continue.
+`;
+
+  expect(parseMarkdownSections(markdown).sections.map((section) => section.heading)).toEqual([
+    "Objective",
+    "Notes",
+  ]);
+});
+
 for (const tagName of htmlRawTagNames) {
   test(`resumes heading parsing after single-line <${tagName}> blocks`, () => {
     const markdown = `## Objective

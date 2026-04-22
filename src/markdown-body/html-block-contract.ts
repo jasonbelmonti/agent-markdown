@@ -14,8 +14,14 @@ export type HtmlTerminator = "-->" | "]]>" | ">" | "?>";
 export type HtmlBlockState =
   | {
       kind: "matching-tag-block";
-      blockKind: HtmlMatchingTagBlockKind;
+      blockKind: "raw-tag";
       tagName: string;
+    }
+  | {
+      kind: "matching-tag-block";
+      blockKind: "wrapper-tag";
+      tagName: string;
+      nestingDepth: number;
     }
   | {
       kind: "terminator-block";

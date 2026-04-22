@@ -181,6 +181,30 @@ export function containsClosingTag(line: string, tagName: string): boolean {
   ).test(line);
 }
 
+export function readMatchingTagDepthDelta(line: string, tagName: string): number {
+  const matchingTagPattern = new RegExp(
+    `<(/?)${escapeForRegExp(tagName)}\\b[^>]*>`,
+    "igu",
+  );
+  let openCount = 0;
+  let closeCount = 0;
+
+  for (const match of line.matchAll(matchingTagPattern)) {
+    const matchedTag = match[0];
+
+    if (match[1] === "/") {
+      closeCount += 1;
+      continue;
+    }
+
+    if (!matchedTag.trimEnd().endsWith("/>")) {
+      openCount += 1;
+    }
+  }
+
+  return openCount - closeCount;
+}
+
 function readTerminatorBlockStart(blockContent: string): HtmlBlockState | null {
   for (const definition of terminatorBlockDefinitions) {
     if (definition.startPattern.test(blockContent)) {
@@ -200,6 +224,10 @@ function readMatchingTagBlock(
   blockKind: "raw-tag" | "wrapper-tag",
   tagName: string,
 ): HtmlBlockState {
+  if (blockKind === "wrapper-tag") {
+    return readMatchingWrapperTagBlock(blockContent, tagName);
+  }
+
   return containsClosingTag(blockContent, tagName)
     ? {
         kind: "single-line-structural",
@@ -209,6 +237,23 @@ function readMatchingTagBlock(
         kind: "matching-tag-block",
         blockKind,
         tagName,
+      };
+}
+
+function readMatchingWrapperTagBlock(
+  blockContent: string,
+  tagName: string,
+): HtmlBlockState {
+  return readMatchingTagDepthDelta(blockContent, tagName) === 0
+    ? {
+        kind: "single-line-structural",
+        structuralKind: "inline-matching-tag",
+      }
+    : {
+        kind: "matching-tag-block",
+        blockKind: "wrapper-tag",
+        tagName,
+        nestingDepth: 0,
       };
 }
 

@@ -1,5 +1,6 @@
 import {
   containsClosingTag,
+  readMatchingTagDepthDelta,
   readHtmlBlockStart,
 } from "./html-block-recognition.ts";
 export {
@@ -26,7 +27,12 @@ export function advanceHtmlBlockState(
     case "terminator-block":
       return line.includes(state.terminator) ? null : state;
     case "matching-tag-block":
-      return containsClosingTag(line, state.tagName) ? null : state;
+      switch (state.blockKind) {
+        case "raw-tag":
+          return containsClosingTag(line, state.tagName) ? null : state;
+        case "wrapper-tag":
+          return advanceMatchingWrapperTagBlock(line, state);
+      }
   }
 }
 
@@ -47,7 +53,12 @@ export function advancePersistentHtmlBlockState(
     case "terminator-block":
       return line.includes(state.terminator) ? null : state;
     case "matching-tag-block":
-      return containsClosingTag(line, state.tagName) ? null : state;
+      switch (state.blockKind) {
+        case "raw-tag":
+          return containsClosingTag(line, state.tagName) ? null : state;
+        case "wrapper-tag":
+          return advanceMatchingWrapperTagBlock(line, state);
+      }
   }
 }
 
@@ -70,4 +81,18 @@ export function consumeOpeningHtmlBlockLine(
       ? advancePersistentHtmlBlockState(line, blockState)
       : null,
   };
+}
+
+function advanceMatchingWrapperTagBlock(
+  line: string,
+  state: Extract<HtmlBlockState, { kind: "matching-tag-block"; blockKind: "wrapper-tag" }>,
+): Extract<PersistentHtmlBlockState, { kind: "matching-tag-block"; blockKind: "wrapper-tag" }> | null {
+  const nextDepth = state.nestingDepth + readMatchingTagDepthDelta(line, state.tagName);
+
+  return nextDepth > 0
+    ? {
+        ...state,
+        nestingDepth: nextDepth,
+      }
+    : null;
 }

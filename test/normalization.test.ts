@@ -733,6 +733,54 @@ Limit the fix to excluding inline HTML tags from shared HTML-block classificatio
   });
 });
 
+test("does not count checklist items hidden inside nested wrapper tags before the outer close", () => {
+  expect(
+    composeFixture({
+      path: "plans/nested-wrapper-checklists.task.md",
+      discoveryMatches: ["**/*.task.md"],
+      markdown: `---
+doc_spec: agent-markdown/0.1
+doc_kind: task
+doc_profile: task/basic@v1
+title: Nested wrapper checklist items stay invalid
+status: ready
+---
+## Objective
+
+Keep nested HTML wrappers from leaking hidden checklist markers.
+
+## Context / Constraints
+
+The outer <details> wrapper remains open after an inner same-tag wrapper closes.
+
+## Materially verifiable success criteria
+
+<details>
+<details>
+</details>
+- [ ] Hidden checklist only.
+</details>
+
+## Execution notes
+
+Limit the fix to tracking nested same-tag wrapper depth in shared HTML-block state.
+`,
+    }).validation,
+  ).toEqual({
+    conformance: "recognized",
+    errors: [
+      {
+        code: "checklist-required",
+        severity: "error",
+        message:
+          'Section "Materially verifiable success criteria" must contain checklist items for profile "task/basic@v1".',
+        path: 'body.sections["Materially verifiable success criteria"]',
+      },
+    ],
+    warnings: [],
+  });
+});
+
 test("keeps list context across continuation paragraphs", () => {
   expect(
     composeFixture({
