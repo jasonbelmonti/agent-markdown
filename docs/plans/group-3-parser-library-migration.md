@@ -110,9 +110,10 @@ silently layering repo-local parser rules on top.
 
 Direction:
 
-- CommonMark is the baseline for instance-document bodies.
-- GFM task-list syntax is an explicit supported extension because it is part of
-  the MVP task-profile contract.
+- GitHub Flavored Markdown is the baseline for instance-document bodies.
+- Task-list semantics are the GFM feature currently used directly by the MVP
+  task-profile contract, but the chosen parser direction accepts the broader
+  GFM surface.
 - Raw HTML is allowed and interpreted according to the chosen Markdown engine.
 - The core meta-spec should not promise repo-local HTML-hiding behavior that a
   standard Markdown parser does not naturally provide.

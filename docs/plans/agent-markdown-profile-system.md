@@ -252,9 +252,11 @@ profiles do not accidentally turn parsing behavior into local folklore.
 
 Default direction:
 
-- CommonMark defines the core body-parsing model
-- supported GFM features may be layered in explicitly when the meta-spec
-  depends on them, such as task-list syntax
+- GitHub Flavored Markdown defines the shared body-parsing model for instance
+  documents
+- task-list semantics are the currently important GFM feature for the MVP task
+  profile, but the shared parser contract is not limited to that single
+  extension
 - raw HTML is interpreted according to the selected Markdown engine rather than
   hidden or reinterpreted by profile-local heuristics
 

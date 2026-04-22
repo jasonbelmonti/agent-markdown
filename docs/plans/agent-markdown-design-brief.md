@@ -186,9 +186,9 @@ repo-specific parsing dialect.
 
 The intended baseline is:
 
-- CommonMark for core Markdown structure
-- GitHub Flavored Markdown task-list syntax for checklist semantics used by the
-  MVP task profile
+- GitHub Flavored Markdown for instance-document body structure
+- task-list semantics are the GFM feature currently used directly by the MVP
+  task profile, but the parser surface is not limited to task lists
 - raw HTML interpreted according to the chosen Markdown parser rather than
   hidden by custom repository-local rules
 
